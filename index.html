@@ -49,7 +49,7 @@ const DEFAULT_CONFIG = {
   heroHeadline:'Insights & Resources',
   heroSubheading:'Stay ahead with the latest thinking from our team.',
   heroImageUrl:'',
-  fallbackImageUrl:'https://source.unsplash.com/800x450/?business,technology',heroImageUrl:'https://source.unsplash.com/1600x900/?office,modern',
+  fallbackImageUrl:'https://picsum.photos/seed/fallback/800/450',heroImageUrl:'https://picsum.photos/seed/hero/1600/900',
   articles:[],news:[],aboutText:'',products:[],generated:false,
 };
 
@@ -85,7 +85,7 @@ async function scrapeBrand(url){
   const clean=url.startsWith('http')?url:'https://'+url;
   const domain=clean.replace(/https?:\/\//,'').split('/')[0];
   const prompt=`Analyze the website at ${clean} and return ONLY valid JSON, no markdown:
-{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"max 8 word headline","heroSubheading":"one sentence","heroImageUrl":"","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
+{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
 Generate exactly 6 articles and 6 news items thematic to this brand. Extract REAL brand colors. Slugs lowercase-hyphenated.`;
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
@@ -96,10 +96,10 @@ Generate exactly 6 articles and 6 news items thematic to this brand. Extract REA
   const data=await res.json();
   if(data.error)throw new Error(data.error);
   const b=JSON.parse(data.choices[0].message.content);
-  const unsplashTerms=['technology','business','marketing','office','teamwork','innovation','strategy','growth','digital','content'];
+  const imgSeeds=[10,20,30,40,50,60,70,80,90,100,110,120];
   const mapItem=(a,i,type)=>({
     id:`${type}-${i}`,title:a.title||`${type} ${i+1}`,summary:a.summary||'',
-    imageUrl:`https://source.unsplash.com/800x450/?${encodeURIComponent((a.category||unsplashTerms[i%unsplashTerms.length]).toLowerCase())}&sig=${i}`,
+    imageUrl:`https://picsum.photos/seed/${type}-${i}/800/450`,
     slug:a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-')||`${type}-${i}`,
     category:a.category||(type==='news'?'News':'Insights'),
     readTime:a.readTime||'5 min read',date:a.date||'2025-03-01',
@@ -638,14 +638,14 @@ function DemoHub(){
   const merged=[...contentfulItems,...(config.articles||[])].slice(0,6);
   const newsItems=(config.news||[]).slice(0,6);
   const featuredArticle=merged[0];
-  const gridArticles=merged.slice(1,6);
+  const gridArticles=merged.slice(1,7);
 
   return(
     <HubLayout>
       {/* Hero */}
       <section style={{
         minHeight:480,display:'flex',alignItems:'center',
-        background:`linear-gradient(135deg,${config.brandPrimary}f0 0%,${config.brandPrimary}bb 100%),url(${config.heroImageUrl||'https://source.unsplash.com/1600x900/?office,workspace,modern'}) center/cover no-repeat`,
+        background:`linear-gradient(135deg,${config.brandPrimary}f0 0%,${config.brandPrimary}bb 100%),url(${config.heroImageUrl||'https://picsum.photos/seed/hero/1600/900'}) center/cover no-repeat`,
         position:'relative',overflow:'hidden',
       }}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'80px 32px',width:'100%'}}>
@@ -671,9 +671,8 @@ function DemoHub(){
 
       {/* Articles */}
       <SectionWrap title="Latest Articles" sub="In-depth guides, tutorials, and expert takes" link="#/demo/articles" linkLabel="See all articles →" config={config}>
-        {featuredArticle&&<div style={{marginBottom:24}}><ContentCard item={featuredArticle} basePath="/demo/articles" featured/></div>}
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24}}>
-          {gridArticles.map(item=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/articles"/>)}
+          {merged.map(item=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/articles"/>)}
         </div>
       </SectionWrap>
 
