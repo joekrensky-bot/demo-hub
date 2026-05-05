@@ -16,26 +16,16 @@ exports.handler = async (event) => {
 
   let url = '';
   try { url = JSON.parse(event.body).url || ''; }
-  catch(e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request body' }) }; }
+  catch(e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request body: ' + e.message }) }; }
   if (!url) return { statusCode: 400, headers, body: JSON.stringify({ error: 'url is required' }) };
 
   const clean = url.startsWith('http') ? url : 'https://' + url;
   const domain = clean.replace(/https?:\/\//, '').split('/')[0];
+  const log = []; // collect debug info
 
-  // ── Core Jasper command helper ──
-  // Per docs: inputs.command is required. context is optional string. retrievalAddOn optional.
-  const jasperCmd = async ({ command, context, retrievalAddOn, searchQuery, scrapeUrls }) => {
-    const inputs = { command };
-    if (context && typeof context === 'string' && context.trim()) inputs.context = context.trim();
-    if (retrievalAddOn) inputs.retrievalAddOn = retrievalAddOn;
-
-    const options = {};
-    if (searchQuery) options.webSearch = { searchQuery, maxResults: 8 };
-    if (scrapeUrls && scrapeUrls.length) options.webScraper = { urls: scrapeUrls };
-
-    const body = { inputs };
-    if (Object.keys(options).length) body.options = options;
-
+  // ── Jasper command helper ──
+  const jasperCmd = async (label, body) => {
+    log.push({ step: label, request: JSON.stringify(body).slice(0, 200) });
     const r = await fetch('https://api.jasper.ai/v1/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': JASPER_KEY },
@@ -43,174 +33,105 @@ exports.handler = async (event) => {
       signal: AbortSignal.timeout(45000),
     });
     const txt = await r.text();
-    if (!r.ok) throw new Error(`Jasper ${r.status}: ${txt}`);
-    const d = JSON.parse(txt);
-    return (d.data?.[0]?.text || '').trim();
+    if (!r.ok) {
+      log.push({ step: label + '_error', status: r.status, response: txt.slice(0, 500) });
+      throw new Error(`Jasper ${r.status} (${label}): ${txt.slice(0, 300)}`);
+    }
+    const result = (JSON.parse(txt).data?.[0]?.text || '').trim();
+    log.push({ step: label + '_ok', chars: result.length });
+    return result;
   };
 
-  // ── 1. Fetch og tags ──
-  let ogImage = '', ogTitle = '', ogDesc = '', pageHtml = '';
+  // ── 1. Scrape og tags ──
+  let ogImage = '', ogTitle = '', ogDesc = '';
   try {
     const p = await fetch(clean, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
       signal: AbortSignal.timeout(6000), redirect: 'follow',
     });
     if (p.ok) {
-      pageHtml = await p.text();
-      const mi = pageHtml.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-              || pageHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-              || pageHtml.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      const h = await p.text();
+      const mi = h.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+              || h.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+              || h.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
       if (mi) ogImage = mi[1].trim().replace(/&amp;/g, '&');
-      const mt = pageHtml.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-              || pageHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      const mt = h.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+              || h.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
       if (mt) ogTitle = mt[1].trim();
-      else { const t = pageHtml.match(/<title[^>]*>([^<]+)<\/title>/i); if (t) ogTitle = t[1].trim(); }
-      const md = pageHtml.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-              || pageHtml.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      else { const t = h.match(/<title[^>]*>([^<]+)<\/title>/i); if (t) ogTitle = t[1].trim(); }
+      const md = h.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+              || h.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
       if (md) ogDesc = md[1].trim();
+      log.push({ step: 'og_scrape', ogTitle, ogImage: ogImage.slice(0, 80) });
     }
-  } catch(e) {}
+  } catch(e) { log.push({ step: 'og_scrape_fail', error: e.message }); }
 
-  // ── 2. Get existing Jasper tone IDs for this workspace ──
-  let toneId = null;
-  try {
-    const tonesRes = await fetch('https://api.jasper.ai/v1/tones?limit=1', {
-      headers: { 'x-api-key': JASPER_KEY },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (tonesRes.ok) {
-      const tonesData = await tonesRes.json();
-      toneId = tonesData.data?.[0]?.id || null;
-    }
-  } catch(e) {}
-
-  // ── 3. Try blog/news pages with webScraper ──
+  // ── 2. Jasper: try blog paths with webScraper ──
   const blogPaths = ['/blog', '/news', '/articles', '/insights', '/resources',
                      '/press', '/en-us/news', '/en/blog', '/learn', '/stories',
-                     '/updates', '/media', '/newsroom', '/content', '/thinking'];
+                     '/updates', '/media', '/newsroom'];
   let scrapedContent = '';
-
   for (const path of blogPaths) {
     try {
-      const result = await jasperCmd({
-        command: `List every article, blog post, or news item you find on this page. For each one include: TITLE: [exact title] | DATE: [publication date] | SUMMARY: [2 sentence summary of the actual content] | CATEGORY: [topic category]. List at least 6 items if available.`,
-        retrievalAddOn: 'webScraper',
-        scrapeUrls: [`https://${domain}${path}`],
+      const pageUrl = `https://${domain}${path}`;
+      scrapedContent = await jasperCmd(`scrape_blog${path}`, {
+        inputs: {
+          command: `List all article and blog post titles, dates, and summaries found at ${pageUrl}. For each use format: TITLE: [title] | DATE: [date] | SUMMARY: [2 sentences] | CATEGORY: [category]`,
+          retrievalAddOn: 'webScraper',
+        },
+        options: { webScraper: { urls: [pageUrl] } },
       });
-      if (result && result.length > 200) {
-        scrapedContent = result;
-        break;
-      }
+      if (scrapedContent.length > 200) break;
+      scrapedContent = '';
     } catch(e) { continue; }
   }
 
-  // ── 4. Parallel: article search + news search + brand scrape ──
+  // ── 3. Parallel Jasper calls ──
   const [articleRes, newsRes, brandRes] = await Promise.allSettled([
-
-    // Articles — use scraped content or fall back to webSearch
     scrapedContent.length > 200
       ? Promise.resolve(scrapedContent)
-      : jasperCmd({
-          command: `Find and list the 6 most recent blog posts or articles published on ${domain}. For each: TITLE: [title] | DATE: [date] | SUMMARY: [2 sentence summary] | CATEGORY: [category]`,
-          retrievalAddOn: 'webSearch',
-          searchQuery: `site:${domain} blog OR article OR insight OR resource`,
+      : jasperCmd('article_search', {
+          inputs: {
+            command: `Find the 6 most recent blog posts or articles published on ${domain}. For each: TITLE: [title] | DATE: [date] | SUMMARY: [2 sentences] | CATEGORY: [category]`,
+            retrievalAddOn: 'webSearch',
+          },
+          options: { webSearch: { searchQuery: `site:${domain} blog OR articles OR insights`, maxResults: 8 } },
         }),
 
-    // News
-    jasperCmd({
-      command: `Find the 6 most recent news items, press releases, product announcements, or media coverage about ${domain} from 2024-2025. For each: TITLE: [title] | DATE: [date] | SUMMARY: [1-2 sentences] | CATEGORY: News`,
-      retrievalAddOn: 'webSearch',
-      searchQuery: `"${domain}" OR "${ogTitle || domain}" news announcement 2025`,
+    jasperCmd('news_search', {
+      inputs: {
+        command: `Find 6 recent news items, announcements or press coverage about ${domain} from 2024-2025. For each: TITLE: [title] | DATE: [date] | SUMMARY: [1-2 sentences] | CATEGORY: News`,
+        retrievalAddOn: 'webSearch',
+      },
+      options: { webSearch: { searchQuery: `"${domain}" news OR announcement 2025`, maxResults: 8 } },
     }),
 
-    // Brand identity from homepage
-    jasperCmd({
-      command: `Visit ${clean} and extract these exact details: HEADLINE: [main hero headline text exactly as written] | SUBHEADLINE: [subheadline or description text exactly as written] | ABOUT: [2-3 paragraph description of what this company does] | PRODUCTS: [list of main product or service names] | NAV_COLOR: [best guess hex for header/nav background] | CTA_COLOR: [best guess hex for primary button color]`,
-      retrievalAddOn: 'webScraper',
-      scrapeUrls: [clean],
+    jasperCmd('brand_scrape', {
+      inputs: {
+        command: `Visit ${clean} and extract: HEADLINE: [main headline text] | SUBHEADLINE: [subheadline text] | ABOUT: [2-3 paragraphs about the company] | PRODUCTS: [product names] | NAV_COLOR: [hex of nav/header background] | CTA_COLOR: [hex of CTA button]`,
+        retrievalAddOn: 'webScraper',
+      },
+      options: { webScraper: { urls: [clean] } },
     }),
-
   ]);
 
   const articleText = articleRes.status === 'fulfilled' ? articleRes.value : '';
   const newsText = newsRes.status === 'fulfilled' ? newsRes.value : '';
   const brandText = brandRes.status === 'fulfilled' ? brandRes.value : '';
 
-  // ── 5. Fallback: if Jasper failed entirely, use webSearch for content ──
-  let fallbackArticles = '', fallbackBrand = '';
-  if (!articleText && !brandText) {
-    try {
-      [fallbackArticles, fallbackBrand] = await Promise.all([
-        jasperCmd({
-          command: `Search for recent articles and content from ${domain}. List 6 articles with TITLE: | DATE: | SUMMARY: | CATEGORY: for each.`,
-          retrievalAddOn: 'webSearch',
-          searchQuery: `${domain} blog articles news 2024 2025`,
-        }),
-        jasperCmd({
-          command: `What does ${domain} do? What are their main products, brand colors, and target audience? Describe their headline and value proposition.`,
-          context: `Website: ${clean}. Page title: ${ogTitle}. Description: ${ogDesc}.`,
-        }),
-      ]);
-    } catch(e) {}
-  }
+  log.push({ step: 'jasper_results', articleChars: articleText.length, newsChars: newsText.length, brandChars: brandText.length });
 
-  // ── 6. Build single JSON via GPT-4o ──
-  const finalArticles = articleText || fallbackArticles;
-  const finalBrand = brandText || fallbackBrand;
+  // ── 4. GPT structures into JSON ──
+  const gptPrompt = `Build a content hub JSON for ${clean}.
 
-  const gptPrompt = `Build a content hub JSON for ${clean} (${domain}).
+BRAND CRAWL: ${brandText || `Use knowledge of ${domain}. Title: "${ogTitle}" Desc: "${ogDesc}"`}
+ARTICLES: ${articleText || `Generate 6 specific articles for ${domain}'s industry`}
+NEWS: ${newsText || `Generate 6 recent news items for ${domain}`}
+og:image: "${ogImage}"
 
-BRAND DATA FROM JASPER CRAWL:
-${finalBrand || `Use your knowledge of ${domain}. og:title="${ogTitle}" og:description="${ogDesc}"`}
-
-ARTICLES FROM JASPER:
-${finalArticles || `Generate 6 plausible articles deeply specific to ${domain}'s actual products and industry.`}
-
-NEWS FROM JASPER:
-${newsText || `Generate 6 plausible recent news items for ${domain}.`}
-
-VERIFIED HOMEPAGE META:
-- og:title: "${ogTitle}"
-- og:description: "${ogDesc}"
-- og:image: "${ogImage}"
-
-Return ONLY valid JSON, no markdown, no code fences:
-{
-  "companyName": "real company name",
-  "brandPrimary": "#hex from NAV_COLOR in brand data or your knowledge of ${domain}",
-  "brandAccent": "#hex from CTA_COLOR in brand data or your knowledge",
-  "brandBg": "#f9f7f4",
-  "brandText": "#1a1a2e",
-  "brandHeaderText": "#ffffff or dark if light header",
-  "heroHeadline": "from HEADLINE field - exact text from site, max 8 words",
-  "heroSubheading": "from SUBHEADLINE field - exact text from site",
-  "heroImageUrl": "${ogImage}",
-  "articles": [
-    {
-      "title": "real or highly plausible article title",
-      "summary": "real 2-3 sentence summary",
-      "slug": "lowercase-hyphenated",
-      "category": "real category",
-      "readTime": "5 min read",
-      "date": "YYYY-MM-DD",
-      "body": "<p>Opening paragraph specific to this company and topic.</p><h2>Key section heading</h2><p>Detailed paragraph with specifics.</p><p>Another paragraph.</p><blockquote><p>Key insight or stat.</p></blockquote><p>Closing with takeaways.</p>"
-    }
-  ],
-  "news": [
-    {
-      "title": "real or plausible news headline",
-      "summary": "1-2 sentence summary",
-      "slug": "lowercase-hyphenated",
-      "category": "News",
-      "readTime": "2 min read",
-      "date": "YYYY-MM-DD",
-      "body": "<p>News paragraph.</p><p>Context paragraph.</p>"
-    }
-  ],
-  "aboutText": "from ABOUT field, 2-3 accurate paragraphs",
-  "products": [{"name": "real product name", "description": "real description", "cta": "Learn more"}]
-}
-Exactly 6 articles, exactly 6 news items. Use crawled data wherever present. Fill gaps with deep brand knowledge of ${domain}. Slugs lowercase-hyphenated.`;
+Return ONLY valid JSON:
+{"companyName":"","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#fff","heroHeadline":"max 8 words","heroSubheading":"1 sentence","heroImageUrl":"${ogImage}","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"YYYY-MM-DD","body":"<p>paragraph</p><h2>heading</h2><p>paragraph</p><p>paragraph</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"YYYY-MM-DD","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
+Exactly 6 articles and 6 news items. Slugs lowercase-hyphenated.`;
 
   try {
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -221,7 +142,7 @@ Exactly 6 articles, exactly 6 news items. Use crawled data wherever present. Fil
         max_tokens: 4000,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a content hub builder. Parse crawled web data into clean JSON. Return valid JSON only.' },
+          { role: 'system', content: 'You are a content hub builder. Return valid JSON only.' },
           { role: 'user', content: gptPrompt },
         ],
       }),
@@ -230,7 +151,7 @@ Exactly 6 articles, exactly 6 news items. Use crawled data wherever present. Fil
 
     if (!gptRes.ok) {
       const e = await gptRes.text();
-      return { statusCode: gptRes.status, headers, body: JSON.stringify({ error: `OpenAI ${gptRes.status}: ${e}` }) };
+      return { statusCode: gptRes.status, headers, body: JSON.stringify({ error: `OpenAI ${gptRes.status}: ${e}`, debug: log }) };
     }
 
     const brand = JSON.parse((await gptRes.json()).choices[0].message.content);
@@ -240,7 +161,7 @@ Exactly 6 articles, exactly 6 news items. Use crawled data wherever present. Fil
       id: `${type}-${i}`, title: a.title || `${type} ${i+1}`, summary: a.summary || '',
       imageUrl: `https://picsum.photos/seed/${type}-${i}/800/450`,
       slug: a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || `${type}-${i}`,
-      category: a.category || (type==='news'?'News':'Insights'),
+      category: a.category||(type==='news'?'News':'Insights'),
       readTime: a.readTime||'5 min read', date: a.date||'2025-03-01',
       body: a.body||'', source:'scraped', isNew:false,
     });
@@ -248,22 +169,19 @@ Exactly 6 articles, exactly 6 news items. Use crawled data wherever present. Fil
     return {
       statusCode: 200, headers,
       body: JSON.stringify({
-        companyName: brand.companyName || domain,
-        brandPrimary: brand.brandPrimary || '#0f172a',
-        brandAccent: brand.brandAccent || '#6366f1',
-        brandBg: '#f9f7f4', brandText: '#1a1a2e',
-        brandHeaderText: brand.brandHeaderText || '#ffffff',
+        companyName: brand.companyName||domain, brandPrimary: brand.brandPrimary||'#0f172a',
+        brandAccent: brand.brandAccent||'#6366f1', brandBg:'#f9f7f4', brandText:'#1a1a2e',
+        brandHeaderText: brand.brandHeaderText||'#ffffff',
         logoUrl: `https://logo.clearbit.com/${domain}`,
-        heroHeadline: brand.heroHeadline || ogTitle || 'Insights & Resources',
-        heroSubheading: brand.heroSubheading || ogDesc || 'Stay ahead with the latest thinking.',
-        heroImageUrl: ogImage || '',
+        heroHeadline: brand.heroHeadline||ogTitle||'Insights & Resources',
+        heroSubheading: brand.heroSubheading||ogDesc||'Stay ahead with the latest thinking.',
+        heroImageUrl: ogImage||'',
         articles: (brand.articles||[]).slice(0,6).map((a,i)=>mapItem(a,i,'article')),
         news: (brand.news||[]).slice(0,6).map((n,i)=>mapItem(n,i,'news')),
-        aboutText: brand.aboutText || '',
-        products: brand.products || [],
+        aboutText: brand.aboutText||'', products: brand.products||[],
       }),
     };
   } catch(err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message, debug: log }) };
   }
 };
