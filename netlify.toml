@@ -1,3 +1,6 @@
+[functions."*"]
+  timeout = 26
+ 
 [[redirects]]
   from = "/*"
   to = "/index.html"
