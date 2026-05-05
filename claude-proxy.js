@@ -230,20 +230,38 @@ exports.handler = async (event) => {
 
   const systemPrompt = 'You are a content hub builder. Return valid JSON only, no markdown, no code fences.';
 
-  const userPrompt = 'Build a content hub JSON for ' + clean + ' (' + domain + ').\n\n' +
-    toneRef + '\n\n' +
-    blogRef + '\n\n' +
-    'HOMEPAGE META: og:title="' + ogTitle + '" og:description="' + ogDesc + '" og:image="' + ogImage + '"\n\n' +
-    'Return this exact JSON (6 articles, 6 news items):\n' +
-    '{"companyName":"","brandPrimary":"#hex real nav color","brandAccent":"#hex real CTA color",' +
-    '"brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#hex",' +
-    '"heroHeadline":"real headline from site max 8 words",' +
-    '"heroSubheading":"real subheadline from site",' +
-    '"heroImageUrl":"' + ogImage + '",' +
-    '"articles":[{"title":"real or on-brand title","summary":"2-3 sentences in brand voice","slug":"lowercase-hyphen","category":"real category","readTime":"5 min read","date":"YYYY-MM-DD","body":"<p>on-brand opening para</p><h2>section heading</h2><p>detail para</p><p>another para</p><blockquote><p>key insight</p></blockquote><p>closing para</p>"}],' +
-    '"news":[{"title":"real or plausible headline","summary":"1-2 sentences","slug":"lowercase-hyphen","category":"News","readTime":"2 min read","date":"YYYY-MM-DD","body":"<p>news para</p><p>context para</p>"}],' +
-    '"aboutText":"2-3 paragraphs in brand voice",' +
-    '"products":[{"name":"real product","description":"real description","cta":"Learn more"}]}';
+  // Ensure every value is a plain string - no nulls/undefined can touch the prompt
+  const s = (v) => (v == null ? '' : String(v));
+  const userPrompt = [
+    'Build a content hub JSON for ' + s(clean) + ' (' + s(domain) + ').',
+    '',
+    s(toneRef),
+    '',
+    s(blogRef),
+    '',
+    'HOMEPAGE META:',
+    'og:title: ' + s(ogTitle),
+    'og:description: ' + s(ogDesc),
+    'og:image: ' + s(ogImage),
+    '',
+    'Return exactly this JSON shape with 6 articles and 6 news items (no markdown, no code fences):',
+    '{',
+    '  "companyName": "real company name",',
+    '  "brandPrimary": "#hex real nav/header color",',
+    '  "brandAccent": "#hex real CTA button color",',
+    '  "brandBg": "#f9f7f4",',
+    '  "brandText": "#1a1a2e",',
+    '  "brandHeaderText": "#ffffff or dark hex",',
+    '  "heroHeadline": "real headline from site max 8 words",',
+    '  "heroSubheading": "real subheadline from site 1 sentence",',
+    '  "heroImageUrl": "' + s(ogImage) + '",',
+    '  "articles": [{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"YYYY-MM-DD","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],',
+    '  "news": [{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"YYYY-MM-DD","body":"<p>para</p><p>para</p>"}],',
+    '  "aboutText": "2-3 paragraphs",',
+    '  "products": [{"name":"","description":"","cta":"Learn more"}]',
+    '}',
+    'All slugs lowercase-hyphenated. Use real scraped content first, fill gaps with brand knowledge.',
+  ].join('\n');
 
   try {
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
