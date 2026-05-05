@@ -307,14 +307,14 @@ exports.handler = async (event) => {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
       body: JSON.stringify({
-        model:'gpt-4o', max_tokens:2000,
+        model:'gpt-4o-mini', max_tokens:2000,
         response_format:{type:'json_object'},
         messages:[
           {role:'system', content:'You are a content hub builder. Return valid JSON only, no markdown.'},
           {role:'user', content:userPrompt},
         ],
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if(!gptRes.ok) {
