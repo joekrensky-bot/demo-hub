@@ -1083,20 +1083,15 @@ function DetailPage({slug,type}){
 
       <div style={{maxWidth:1200,margin:'0 auto',padding:'48px 32px',display:'grid',gridTemplateColumns:'1fr 300px',gap:48,alignItems:'start'}}>
         <article>
-          <p style={{fontSize:19,lineHeight:1.7,color:'#374151',marginBottom:32,fontWeight:400,borderLeft:`3px solid ${config.brandAccent}`,paddingLeft:20}}>{item.summary}</p>
-          <div style={{fontSize:16,lineHeight:1.8,color:'#374151'}} dangerouslySetInnerHTML={{__html:body.replace(/<h2>/g,'<h2 style="font-family:DM Serif Display,serif;font-size:26px;color:#0f172a;margin:36px 0 14px;">').replace(/<blockquote>/g,'<blockquote style="margin:28px 0;padding:20px 24px;border-left:3px solid '+config.brandAccent+';background:#f8fafc;border-radius:0 10px 10px 0;font-style:italic;">').replace(/<p>/g,'<p style="margin-bottom:20px;">')}}/>
+          <p style={{fontSize:19,lineHeight:1.7,color:getThemeStyles(config.theme||'generic',config).forceDark?'#cbd5e1':'#374151',marginBottom:32,fontWeight:400,borderLeft:`3px solid ${config.brandAccent}`,paddingLeft:20}}>{item.summary}</p>
+          {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const bodyColor=ts.forceDark?'#cbd5e1':'#374151';const h2Color=ts.forceDark?'#e2e8f0':'#0f172a';const bqBg=ts.forceDark?'#1e2d3d':'#f8fafc';return(
+<div style={{fontSize:16,lineHeight:1.8,color:bodyColor}} dangerouslySetInnerHTML={{__html:body.replace(/<h2>/g,'<h2 style="font-family:DM Serif Display,serif;font-size:26px;color:'+h2Color+';margin:36px 0 14px;">').replace(/<blockquote>/g,'<blockquote style="margin:28px 0;padding:20px 24px;border-left:3px solid '+config.brandAccent+';background:'+bqBg+';border-radius:0 10px 10px 0;font-style:italic;color:'+bodyColor+';">').replace(/<p>/g,'<p style="margin-bottom:20px;">')}}/>
+)})()}
         </article>
         <aside style={{position:'sticky',top:88,display:'flex',flexDirection:'column',gap:20}}>
-          <div style={{background:'white',border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 22px'}}>
-            <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:10}}>Content powered by</div>
-            <p style={{fontSize:13,color:'#64748b',lineHeight:1.6,marginBottom:14}}>This content was published via Jasper AI and delivered through Contentful — demonstrating AI content flowing to a live frontend.</p>
-            <a href="https://jasper.ai" target="_blank" rel="noreferrer"
-              style={{display:'flex',alignItems:'center',gap:7,background:'#FF4F00',color:'white',padding:'10px 16px',borderRadius:8,fontSize:13,fontWeight:600,textDecoration:'none'}}>
-              <JasperIcon size={16}/> Learn about Jasper
-            </a>
-          </div>
-          <div style={{background:'white',border:'1px solid #e2e8f0',borderRadius:14,padding:'20px 22px'}}>
-            <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:10}}>Share</div>
+
+          <div style={{background:getThemeStyles(config.theme||'generic',config).forceDark?'#0a0f1a':'white',border:`1px solid ${getThemeStyles(config.theme||'generic',config).cardBorder}`,borderRadius:14,padding:'20px 22px'}}>
+            <div style={{fontSize:14,fontWeight:600,color:getThemeStyles(config.theme||'generic',config).forceDark?'#e2e8f0':'#0f172a',marginBottom:10}}>Share</div>
             <div style={{display:'flex',gap:8}}>
               {['LinkedIn','Twitter','Email'].map(s=>(
                 <button key={s} style={{flex:1,padding:8,borderRadius:8,fontSize:12,fontWeight:600,fontFamily:'DM Sans,sans-serif',background:'transparent',border:`1.5px solid ${config.brandAccent}40`,color:config.brandAccent,cursor:'pointer'}}>{s}</button>
