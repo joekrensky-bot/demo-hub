@@ -70,26 +70,41 @@ exports.handler = async (event) => {
   };
 
   // Scenario 3: Curated Unsplash fallbacks by topic (no key needed, direct URLs)
+  // Curated high-quality fallbacks — verified to be professional and relevant
   const FALLBACK_IMAGES = {
-    technology:  'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
-    business:    'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&q=80',
-    marketing:   'https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=800&q=80',
-    ai:          'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=800&q=80',
-    health:      'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&q=80',
-    finance:     'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80',
-    gaming:      'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800&q=80',
-    ecommerce:   'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=800&q=80',
-    security:    'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=800&q=80',
-    cloud:       'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80',
-    data:        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-    default:     'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
+    technology:  'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',  // code on monitor
+    business:    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80',  // business meeting
+    marketing:   'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',  // marketing strategy
+    ai:          'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',  // AI/tech abstract
+    health:      'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&q=80',  // medical professional
+    finance:     'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80',  // finance charts
+    gaming:      'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&q=80',  // gaming setup
+    ecommerce:   'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80',  // shopping/retail
+    security:    'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',  // security/lock
+    cloud:       'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80',  // cloud servers
+    data:        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',  // data dashboard
+    strategy:    'https://images.unsplash.com/photo-1512758017271-d7b84c2113f1?w=800&q=80',  // strategy whiteboard
+    content:     'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',  // content/laptop writing
+    growth:      'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80',  // growth charts
+    default:     'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80',  // modern office
   };
 
-  const getFallbackByCategory = (category) => {
-    const cat = (category || '').toLowerCase();
-    for (const [key, url] of Object.entries(FALLBACK_IMAGES)) {
-      if (cat.includes(key)) return url;
-    }
+  const getFallbackByCategory = (category, title) => {
+    const text = ((category || '') + ' ' + (title || '')).toLowerCase();
+    if(text.includes('security') || text.includes('cyber') || text.includes('threat')) return FALLBACK_IMAGES.security;
+    if(text.includes('ai') || text.includes('artificial') || text.includes('machine learning')) return FALLBACK_IMAGES.ai;
+    if(text.includes('market') || text.includes('campaign') || text.includes('brand')) return FALLBACK_IMAGES.marketing;
+    if(text.includes('content') || text.includes('writing') || text.includes('blog')) return FALLBACK_IMAGES.content;
+    if(text.includes('growth') || text.includes('revenue') || text.includes('scale')) return FALLBACK_IMAGES.growth;
+    if(text.includes('data') || text.includes('analytic') || text.includes('insight')) return FALLBACK_IMAGES.data;
+    if(text.includes('cloud') || text.includes('server') || text.includes('infra')) return FALLBACK_IMAGES.cloud;
+    if(text.includes('health') || text.includes('medical') || text.includes('clinic')) return FALLBACK_IMAGES.health;
+    if(text.includes('financ') || text.includes('invest') || text.includes('capital')) return FALLBACK_IMAGES.finance;
+    if(text.includes('gaming') || text.includes('game')) return FALLBACK_IMAGES.gaming;
+    if(text.includes('ecomm') || text.includes('retail') || text.includes('shop')) return FALLBACK_IMAGES.ecommerce;
+    if(text.includes('strateg') || text.includes('plan') || text.includes('roadmap')) return FALLBACK_IMAGES.strategy;
+    if(text.includes('tech') || text.includes('platform') || text.includes('software')) return FALLBACK_IMAGES.technology;
+    if(text.includes('business') || text.includes('enterprise') || text.includes('team')) return FALLBACK_IMAGES.business;
     return FALLBACK_IMAGES.default;
   };
 
@@ -298,8 +313,8 @@ exports.handler = async (event) => {
     s(toneRef),
     '',
     'HOMEPAGE META:',
-    'og:title: ' + s(ogTitle),
-    'og:description: ' + s(ogDesc),
+    'og:title (USE THIS EXACTLY as heroHeadline, do not rephrase): ' + s(ogTitle),
+    'og:description (USE THIS EXACTLY as heroSubheading, do not rephrase): ' + s(ogDesc),
     'og:image: ' + s(ogImage),
     '',
     'Return exactly this JSON (6 articles, 6 news, no markdown):',
