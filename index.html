@@ -772,9 +772,8 @@ function ContentCard({item,basePath,featured=false,size='normal'}){
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
-      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const cardR=ts.cardRadius;const badgeR=ts.badgeRadius;return null;})()}
-    style={{display:'flex',flexDirection:featured?'row':'column',background:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return ts.cardBg;})(),borderRadius:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return ts.cardRadius;})(),overflow:'hidden',
-        border:item.isNew?`1.5px solid ${config.brandAccent}`:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return `0.5px solid ${ts.cardBorder}`;})(),
+      style={{display:'flex',flexDirection:featured?'row':'column',background:getThemeStyles(config.theme||'generic',config).cardBg,borderRadius:getThemeStyles(config.theme||'generic',config).cardRadius,overflow:'hidden',
+        border:item.isNew?`1.5px solid ${config.brandAccent}`:`0.5px solid ${getThemeStyles(config.theme||'generic',config).cardBorder}`,
         textDecoration:'none',color:'inherit',transition:'transform 0.2s, box-shadow 0.2s',position:'relative'}}
       onMouseOver={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 8px 32px rgba(0,0,0,0.1)';}}
       onMouseOut={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='none';}}>
