@@ -11,6 +11,7 @@ exports.handler = async (event) => {
 
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
   const FIRECRAWL_KEY = process.env.FIRECRAWL_API_KEY;
+  const JASPER_KEY = process.env.JASPER_API_KEY;
 
   if (!OPENAI_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY not set' }) };
 
@@ -148,7 +149,127 @@ exports.handler = async (event) => {
     console.log('Deep mode site images:', siteImages.length);
   }
 
-  // ── STEP 2: GPT structures brand + fills gaps ─────────────────
+  // ── STEP 2: Article URL — scrape + send to Jasper as document ──
+  let featuredArticle = null;
+  if (articleUrl) {
+    log('article scrape start: ' + articleUrl);
+    try {
+      let articleContent = '', articleImage = '', articleTitle = '', articleDesc = '';
+      const articleClean = articleUrl.startsWith('http') ? articleUrl : 'https://' + articleUrl;
+
+      // Firecrawl scrape for full content
+      if (FIRECRAWL_KEY) {
+        const fcArticle = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
+          body: JSON.stringify({ url: articleClean, formats: ['markdown'] }),
+          signal: AbortSignal.timeout(5000),
+        }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+        if (fcArticle) {
+          articleContent = String(fcArticle.data?.markdown || '').slice(0, 8000);
+          const meta = fcArticle.data?.metadata || {};
+          articleImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+          articleTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+          articleDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+          log('firecrawl article: title=' + articleTitle.slice(0,40) + ' image=' + (articleImage?'yes':'no') + ' content=' + articleContent.length + 'chars');
+        }
+      }
+
+      // Fallback: plain og scrape
+      if (!articleTitle) {
+        const r = await fetch(articleClean, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(3000), redirect: 'follow',
+        }).catch(() => null);
+        if (r && r.ok) {
+          const h = await r.text();
+          const mi = h.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+                  || h.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+          if (mi) articleImage = mi[1].trim().replace(/&amp;/g, '&');
+          const mt = h.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+          if (mt) articleTitle = mt[1].trim();
+          const md = h.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+          if (md) articleDesc = md[1].trim();
+          log('og fallback: title=' + articleTitle.slice(0,40));
+        }
+      }
+
+      // No image? Generate with DALL-E 3
+      if (!articleImage && OPENAI_KEY && articleTitle) {
+        log('DALL-E image generate for: ' + articleTitle.slice(0, 50));
+        try {
+          const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
+            body: JSON.stringify({
+              model: 'dall-e-3',
+              prompt: 'Professional editorial hero image for article: "' + articleTitle + '". Clean modern business photography. No text overlay.',
+              size: '1792x1024', quality: 'standard', n: 1,
+            }),
+            signal: AbortSignal.timeout(25000),
+          });
+          if (imgRes.ok) {
+            const imgData = await imgRes.json();
+            articleImage = imgData.data?.[0]?.url || '';
+            log('DALL-E done, url=' + (articleImage?'yes':'no'));
+          }
+        } catch(e) { log('DALL-E error: ' + e.message); }
+      }
+
+      // Create Jasper document
+      let jasperDocId = null, jasperDocUrl = null;
+      if (JASPER_KEY && jasperUserId && (articleContent || articleDesc || articleTitle)) {
+        log('creating Jasper doc userId=' + jasperUserId);
+        try {
+          const jasperRes = await fetch('https://api.jasper.ai/v1/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': JASPER_KEY },
+            body: JSON.stringify({
+              userId: jasperUserId,
+              name: articleTitle || ('Featured Article — ' + domain),
+              content: articleContent || articleDesc || articleTitle,
+              status: 'DRAFT',
+            }),
+            signal: AbortSignal.timeout(8000),
+          });
+          const jasperTxt = await jasperRes.text();
+          log('Jasper doc response: ' + jasperRes.status + ' ' + jasperTxt.slice(0, 200));
+          if (jasperRes.ok) {
+            const jasperData = JSON.parse(jasperTxt);
+            jasperDocId = jasperData.data?.id || jasperData.id || null;
+            if (jasperDocId) jasperDocUrl = 'https://app.jasper.ai/documents/' + jasperDocId;
+            log('Jasper doc created: ' + jasperDocId);
+          }
+        } catch(e) { log('Jasper doc error: ' + e.message); }
+      }
+
+      featuredArticle = {
+        id: 'featured-0',
+        title: articleTitle || 'Featured Article',
+        summary: articleDesc || 'A featured article selected for optimization in Jasper.',
+        imageUrl: articleImage || getFallback('technology', articleTitle),
+        imageSource: articleImage ? (articleImage.includes('oaidalleapiprodscus') || articleImage.includes('openai') ? 'dalle' : 'firecrawl') : 'fallback',
+        slug: (articleTitle || 'featured-article').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        category: 'Featured',
+        readTime: '5 min read',
+        date: new Date().toISOString().slice(0, 10),
+        body: articleContent
+          ? '<p>' + articleContent.slice(0, 4000).replace(/\n\n+/g, '</p><p>').replace(/\n/g, ' ') + '</p>'
+          : '<p>' + (articleDesc || articleTitle) + '</p>',
+        source: 'jasper-doc',
+        isNew: true,
+        jasperDocId,
+        jasperDocUrl,
+        articleSourceUrl: articleClean,
+      };
+      log('featuredArticle ready docId=' + jasperDocId);
+    } catch(e) {
+      log('article flow error: ' + e.message);
+    }
+  }
+
+  // ── STEP 3: GPT structures brand + fills gaps ─────────────────
   const s = v => v == null ? '' : String(v);
 
   const formatSerp = (items, label) => items.length > 0
