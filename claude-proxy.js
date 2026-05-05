@@ -19,22 +19,25 @@ exports.handler = async (event) => {
     const clean = url.startsWith('http') ? url : 'https://' + url;
     const domain = clean.replace(/https?:\/\//, '').split('/')[0];
 
-    // Step 1: fetch the homepage to get real og tags
-    let ogImage = '', ogTitle = '', ogDescription = '';
+    // Step 1: Fetch the homepage for real og tags
+    let ogImage = '', ogTitle = '', ogDescription = '', pageText = '';
     try {
       const pageRes = await fetch(clean, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html',
+          'Accept': 'text/html,application/xhtml+xml',
         },
         redirect: 'follow',
+        signal: AbortSignal.timeout(8000),
       });
       if (pageRes.ok) {
         const html = await pageRes.text();
+
         const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
           || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-          || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-        if (ogImg) ogImage = ogImg[1].trim();
+          || html.match(/<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        if (ogImg) ogImage = ogImg[1].trim().replace(/&amp;/g, '&');
 
         const ogT = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
           || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
@@ -44,62 +47,79 @@ exports.handler = async (event) => {
           || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
           || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
         if (ogD) ogDescription = ogD[1].trim();
-      }
-    } catch(e) {}
 
-    // Step 2: use GPT with web_search_preview to find real articles and brand info
+        if (!ogTitle) {
+          const t = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (t) ogTitle = t[1].trim();
+        }
+
+        // Grab visible text for GPT context
+        pageText = html
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 4000);
+      }
+    } catch(e) {
+      // Couldn't fetch page — GPT will work from its training knowledge
+    }
+
+    // Step 2: Try to fetch the blog/news page for real articles
+    let articlePageText = '';
+    const blogPaths = ['/blog', '/news', '/articles', '/insights', '/resources', '/en-us/news', '/press'];
+    for (const path of blogPaths) {
+      try {
+        const blogRes = await fetch(`https://${domain}${path}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (blogRes.ok) {
+          const html = await blogRes.text();
+          articlePageText = html
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 3000);
+          if (articlePageText.length > 200) break;
+        }
+      } catch(e) {}
+    }
+
     const prompt = `You are building a branded content hub for ${clean}.
 
-VERIFIED DATA FROM THE SITE (use these exactly, do not modify):
-- heroImageUrl: "${ogImage || ''}"
-- heroHeadline: "${ogTitle || ''}" (use this or improve it slightly for a content hub)  
-- heroSubheading: "${ogDescription || ''}" (use this or improve it slightly)
+${ogTitle || ogDescription || pageText ? `REAL DATA SCRAPED FROM THE SITE:
+- Page title / og:title: "${ogTitle}"
+- og:description: "${ogDescription}"
+- heroImageUrl (use EXACTLY, do not change): "${ogImage}"
+- Homepage text: "${pageText.slice(0, 1500)}"
+${articlePageText ? `- Blog/news page text: "${articlePageText.slice(0, 1500)}"` : ''}
+` : `No page data could be fetched. Use your training knowledge about ${domain}.`}
 
-YOUR TASK: Search the web for:
-1. Recent blog posts or articles published on ${domain} — search "site:${domain} blog" or "site:${domain} articles" or "site:${domain} news"
-2. The brand's color scheme, logo, and visual identity
-
-Return ONLY valid JSON, no markdown:
+Using the above real data AND your knowledge of ${domain}, return ONLY valid JSON:
 {
-  "companyName": "string",
-  "brandPrimary": "#hex - the dominant header/nav color",
-  "brandAccent": "#hex - the CTA button color", 
-  "brandBg": "#hex - page background, usually white or near-white",
+  "companyName": "real company name",
+  "brandPrimary": "#hex - real dominant nav/header color",
+  "brandAccent": "#hex - real CTA button color",
+  "brandBg": "#hex - page background",
   "brandText": "#hex - body text color",
-  "brandHeaderText": "#hex - text color in the header (white if dark header)",
+  "brandHeaderText": "#hex - header text color (white if dark header)",
   "logoUrl": "https://logo.clearbit.com/${domain}",
-  "heroHeadline": "from verified data above or slightly improved version",
-  "heroSubheading": "from verified data above or slightly improved version",
+  "heroHeadline": "${ogTitle ? 'use og:title above or rephrase for content hub' : 'compelling content hub headline'}",
+  "heroSubheading": "${ogDescription ? 'use og:description above or rephrase' : 'one sentence value proposition'}",
   "heroImageUrl": "${ogImage || ''}",
-  "articles": [
-    {
-      "title": "REAL article title found on the site",
-      "summary": "actual summary of that article",
-      "slug": "url-slug",
-      "category": "category from the site",
-      "readTime": "X min read",
-      "date": "YYYY-MM-DD",
-      "body": "<p>expanded content about this article topic</p><h2>Key points</h2><p>more detail</p>"
-    }
-  ],
-  "news": [
-    {
-      "title": "REAL news item from the site or recent press",
-      "summary": "actual summary",
-      "slug": "url-slug",
-      "category": "News",
-      "readTime": "2 min read", 
-      "date": "YYYY-MM-DD",
-      "body": "<p>news content</p>"
-    }
-  ],
-  "aboutText": "accurate description of what this company does based on their site",
-  "products": [{"name": "actual product name", "description": "real description", "cta": "Learn more"}]
+  "articles": [{"title":"real or plausible article title for this brand","summary":"2-3 sentences","slug":"url-slug","category":"real category","readTime":"5 min read","date":"2025-03-15","body":"<p>paragraph</p><h2>heading</h2><p>paragraph</p><p>paragraph</p>"}],
+  "news": [{"title":"real or recent news item","summary":"1-2 sentences","slug":"url-slug","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>paragraph</p>"}],
+  "aboutText": "accurate 2-3 paragraph description of the company",
+  "products": [{"name":"real product name","description":"real description","cta":"Learn more"}]
 }
 
-Generate exactly 6 articles and 6 news items using REAL content found on the site. If you can't find enough real articles, generate plausible ones based on the company's actual products and industry. All slugs lowercase-hyphenated.`;
+Generate exactly 6 articles and 6 news items. Use real content from the scraped text where possible, otherwise generate plausible content deeply specific to this brand's actual products and industry. All slugs lowercase-hyphenated.`;
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -107,8 +127,12 @@ Generate exactly 6 articles and 6 news items using REAL content found on the sit
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        tools: [{ type: 'web_search_preview' }],
-        input: prompt,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'You are a brand analyst. Always respond with valid JSON only, no markdown.' },
+          { role: 'user', content: prompt },
+        ],
       }),
     });
 
@@ -118,24 +142,9 @@ Generate exactly 6 articles and 6 news items using REAL content found on the sit
     }
 
     const data = await response.json();
+    const brand = JSON.parse(data.choices[0].message.content);
 
-    // Extract the text output from the responses API format
-    const outputText = data.output
-      ?.filter(o => o.type === 'message')
-      ?.flatMap(o => o.content)
-      ?.filter(c => c.type === 'output_text')
-      ?.map(c => c.text)
-      ?.join('') || '';
-
-    // Parse JSON from the response
-    const jsonMatch = outputText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { statusCode: 500, headers, body: JSON.stringify({ error: 'No JSON in response', raw: outputText.slice(0, 500) }) };
-    }
-
-    const brand = JSON.parse(jsonMatch[0]);
-
-    // Always override heroImageUrl with the real og:image we fetched
+    // Always use the real og:image we scraped — never trust GPT's image URLs
     if (ogImage) brand.heroImageUrl = ogImage;
 
     const mapItem = (a, i, type) => ({
@@ -159,13 +168,13 @@ Generate exactly 6 articles and 6 news items using REAL content found on the sit
         companyName: brand.companyName || domain,
         brandPrimary: brand.brandPrimary || '#0f172a',
         brandAccent: brand.brandAccent || '#6366f1',
-        brandBg: brand.brandBg || '#ffffff',
+        brandBg: brand.brandBg || '#f9f7f4',
         brandText: brand.brandText || '#0f172a',
         brandHeaderText: brand.brandHeaderText || '#ffffff',
         logoUrl: brand.logoUrl || `https://logo.clearbit.com/${domain}`,
         heroHeadline: brand.heroHeadline || ogTitle || 'Insights & Resources',
         heroSubheading: brand.heroSubheading || ogDescription || 'Stay ahead with the latest thinking.',
-        heroImageUrl: ogImage || brand.heroImageUrl || '',
+        heroImageUrl: ogImage || '',
         articles: (brand.articles || []).slice(0, 6).map((a, i) => mapItem(a, i, 'article')),
         news: (brand.news || []).slice(0, 6).map((n, i) => mapItem(n, i, 'news')),
         aboutText: brand.aboutText || '',
