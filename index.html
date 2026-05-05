@@ -83,41 +83,15 @@ function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').repla
 
 async function scrapeBrand(url){
   const clean=url.startsWith('http')?url:'https://'+url;
-  const domain=clean.replace(/https?:\/\//,'').split('/')[0];
-  const prompt=`Analyze the website at ${clean} and return ONLY valid JSON, no markdown:
-{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"copy the og:image URL exactly from the REAL DATA provided above — do not modify it","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
-Generate exactly 6 articles and 6 news items thematic to this brand. Extract REAL brand colors. Slugs lowercase-hyphenated.`;
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({prompt,url:clean})
+    body:JSON.stringify({url:clean})
   });
-  if(!res.ok){const e=await res.text();throw new Error('Proxy error '+res.status+': '+e);}
+  if(!res.ok){const e=await res.text();throw new Error('Proxy '+res.status+': '+e);}
   const data=await res.json();
   if(data.error)throw new Error(data.error);
-  const b=JSON.parse(data.choices[0].message.content);
-  const imgSeeds=[10,20,30,40,50,60,70,80,90,100,110,120];
-  const mapItem=(a,i,type)=>({
-    id:`${type}-${i}`,title:a.title||`${type} ${i+1}`,summary:a.summary||'',
-    imageUrl:`https://picsum.photos/seed/${type}-${i}/800/450`,
-    slug:a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-')||`${type}-${i}`,
-    category:a.category||(type==='news'?'News':'Insights'),
-    readTime:a.readTime||'5 min read',date:a.date||'2025-03-01',
-    body:a.body||'',source:'scraped',isNew:false,
-  });
-  return{
-    companyName:b.companyName||'Content Hub',
-    brandPrimary:b.brandPrimary||'#0f172a',brandAccent:b.brandAccent||'#6366f1',
-    brandBg:b.brandBg||'#ffffff',brandText:b.brandText||'#0f172a',
-    brandHeaderText:b.brandHeaderText||'#ffffff',
-    logoUrl:b.logoUrl||`https://logo.clearbit.com/${domain}`,
-    heroHeadline:b.heroHeadline||'Insights & Resources',
-    heroSubheading:b.heroSubheading||'Stay ahead with the latest thinking.',
-    heroImageUrl:(b.heroImageUrl&&(b.heroImageUrl.includes('http')))?b.heroImageUrl:'',
-    articles:(b.articles||[]).slice(0,6).map((a,i)=>mapItem(a,i,'article')),
-    news:(b.news||[]).slice(0,6).map((n,i)=>mapItem(n,i,'news')),
-    aboutText:b.aboutText||'',products:b.products||[],
-  };
+  return data;
 }
 
 /* ─── ROUTER (hash-based, no library) ─── */
@@ -688,7 +662,9 @@ function DemoHub(){
       {/* Hero */}
       <section style={{
         minHeight:480,display:'flex',alignItems:'center',
-        background:`linear-gradient(to right, ${config.brandPrimary}e0 0%, ${config.brandPrimary}99 60%, ${config.brandPrimary}44 100%), url(${config.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'}) center/cover no-repeat`,
+        background:config.heroImageUrl
+          ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center/cover no-repeat`
+          :`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
         position:'relative',overflow:'hidden',
       }}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'80px 32px',width:'100%'}}>
@@ -696,8 +672,8 @@ function DemoHub(){
             <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
               ⚡ Resource Hub
             </div>
-            <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:'-0.5px'}}>{config.heroHeadline}</h1>
-            <p style={{fontSize:18,color:'rgba(255,255,255,0.8)',lineHeight:1.6,marginBottom:32,maxWidth:480}}>{config.heroSubheading}</p>
+            <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
+            <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
               <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:12,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent}}>
                 Explore Articles →
