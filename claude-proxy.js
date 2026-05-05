@@ -150,11 +150,19 @@ exports.handler = async (event) => {
 
       if (fcRes.ok) {
         const fcData = await fcRes.json();
-        homeMarkdown = String(fcData.data?.markdown || '').slice(0, 8000);
-        const ex = fcData.data?.extract || {};
-        ogImage = String(ex.ogImage || fcData.data?.metadata?.ogImage || '').replace(/&amp;/g, '&');
-        ogTitle = String(ex.ogTitle || fcData.data?.metadata?.ogTitle || fcData.data?.metadata?.title || '');
-        ogDesc = String(ex.ogDescription || fcData.data?.metadata?.ogDescription || fcData.data?.metadata?.description || '');
+        // Firecrawl v1 returns data.markdown or data.content
+        const rawMd = fcData.data?.markdown || fcData.data?.content || fcData.markdown || '';
+        homeMarkdown = String(rawMd || '').slice(0, 8000);
+        // Metadata can be nested differently across versions
+        const meta = fcData.data?.metadata || fcData.metadata || {};
+        const ex = fcData.data?.extract || fcData.extract || {};
+        ogImage = String(ex.ogImage || meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+        ogTitle = String(ex.ogTitle || meta.ogTitle || meta['og:title'] || meta.title || '');
+        ogDesc = String(ex.ogDescription || meta.ogDescription || meta['og:description'] || meta.description || '');
+      } else {
+        // Firecrawl failed — log status but continue
+        const errBody = await fcRes.text();
+        console.log('Firecrawl error', fcRes.status, errBody.slice(0, 200));
       }
     } catch(e) { /* silent */ }
   }
@@ -180,7 +188,7 @@ exports.handler = async (event) => {
         });
         if (bRes.ok) {
           const bData = await bRes.json();
-          const md = String(bData.data?.markdown || '').trim();
+          const md = String(bData.data?.markdown || bData.data?.content || bData.markdown || '').trim();
           if (md.length > 300) {
             blogMarkdown = md.slice(0, 6000);
             break;
@@ -220,13 +228,16 @@ exports.handler = async (event) => {
 
   // ── Step 3: GPT structures into JSON using real scraped content ──
   // Use homepage markdown as tone reference for content generation
-  const toneRef = homeMarkdown
-    ? 'Use the following homepage content as a reference for the brand tone, voice, and topics — write articles that sound like this brand:\n\n' + homeMarkdown.slice(0, 3000)
-    : 'Use your knowledge of ' + domain + ' to write in their brand voice.';
+  const safeHome = String(homeMarkdown || '');
+  const safeBlog = String(blogMarkdown || '');
+  const safeDomain = String(domain || '');
+  const toneRef = safeHome.length > 100
+    ? 'Use the following homepage content as tone/voice reference — write articles that sound like this brand:\n\n' + safeHome.slice(0, 3000)
+    : 'Use your knowledge of ' + safeDomain + ' to write in their brand voice.';
 
-  const blogRef = blogMarkdown
-    ? 'Real blog/news content found on site (use these actual articles/titles where possible):\n\n' + blogMarkdown
-    : 'No blog page found — generate plausible articles based on the homepage content and brand above.';
+  const blogRef = safeBlog.length > 100
+    ? 'Real blog/news content found on site (use these actual article titles and topics where possible):\n\n' + safeBlog.slice(0, 5000)
+    : 'No blog page scraped — generate 6 plausible articles deeply specific to ' + safeDomain + ' products and industry.';
 
   const systemPrompt = 'You are a content hub builder. Return valid JSON only, no markdown, no code fences.';
 
