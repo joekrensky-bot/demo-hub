@@ -85,12 +85,12 @@ async function scrapeBrand(url){
   const clean=url.startsWith('http')?url:'https://'+url;
   const domain=clean.replace(/https?:\/\//,'').split('/')[0];
   const prompt=`Analyze the website at ${clean} and return ONLY valid JSON, no markdown:
-{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"find the og:image or hero background image URL from the site — must be a direct image URL (jpg/png/webp), empty string if none found","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
+{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"copy the og:image URL exactly from the REAL DATA provided above — do not modify it","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
 Generate exactly 6 articles and 6 news items thematic to this brand. Extract REAL brand colors. Slugs lowercase-hyphenated.`;
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({prompt})
+    body:JSON.stringify({prompt,url:clean})
   });
   if(!res.ok){const e=await res.text();throw new Error('Proxy error '+res.status+': '+e);}
   const data=await res.json();
