@@ -323,7 +323,9 @@ function SetupPage(){
       const brand=await scrapeBrand(url.trim());
       clearInterval(iv);
       const autoTheme=detectTheme(brand.companyName, brand.aboutText);
-      updateConfig({prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme});
+      // Wipe old config first so nothing bleeds through from previous analysis
+      localStorage.removeItem('hub_config');
+      updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme,generated:false});
       navigate('/validate');
     }catch(e){
       clearInterval(iv);
@@ -440,6 +442,11 @@ function SetupPage(){
 
         <p style={{textAlign:'center',marginTop:24,fontSize:13,color:'#94a3b8'}}>
           ⚡ Powered by <strong style={{color:'#FF4F00'}}>Jasper AI</strong> · Content Hub Demo Builder
+          {' · '}
+          <button onClick={()=>{localStorage.removeItem('hub_config');window.location.reload();}}
+            style={{background:'none',border:'none',color:'#94a3b8',fontSize:13,cursor:'pointer',textDecoration:'underline',fontFamily:'DM Sans,sans-serif',padding:0}}>
+            Reset
+          </button>
         </p>
       </div>
     </div>

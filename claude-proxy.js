@@ -119,36 +119,25 @@ exports.handler = async (event) => {
   let ogTitle = '';
   let ogDesc = '';
 
-  const fcFetch = (fcUrl) => FIRECRAWL_KEY
-    ? fetch('https://api.firecrawl.dev/v1/scrape', {
+  // Homepage-only Firecrawl scrape — fast, 4s max
+  let blogMarkdown = '';
+  if (FIRECRAWL_KEY) {
+    try {
+      const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
-        body: JSON.stringify({ url: fcUrl, formats: ['markdown'] }),
-        signal: AbortSignal.timeout(5000),
-      }).then(r => r.ok ? r.json() : null).catch(() => null)
-    : Promise.resolve(null);
-
-  // Run homepage + 3 most likely blog paths in parallel (fast)
-  const blogPaths = ['/blog', '/news', '/newsroom'];
-  const [homeData, ...blogResults] = await Promise.all([
-    fcFetch(clean),
-    ...blogPaths.map(p => fcFetch('https://' + domain + p)),
-  ]);
-
-  if (homeData) {
-    const meta = homeData.data?.metadata || homeData.metadata || {};
-    homeMarkdown = String(homeData.data?.markdown || homeData.data?.content || '').slice(0, 5000);
-    ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
-    ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
-    ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
-  }
-
-  // Pick first blog result with real content
-  let blogMarkdown = '';
-  for (const bd of blogResults) {
-    if (!bd) continue;
-    const md = String(bd.data?.markdown || bd.data?.content || '').trim();
-    if (md.length > 300) { blogMarkdown = md.slice(0, 4000); break; }
+        body: JSON.stringify({ url: clean, formats: ['markdown'] }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (fcRes.ok) {
+        const fcData = await fcRes.json();
+        const meta = fcData.data?.metadata || fcData.metadata || {};
+        homeMarkdown = String(fcData.data?.markdown || fcData.data?.content || '').slice(0, 5000);
+        if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+        if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+        if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+      }
+    } catch(e) { /* silent timeout */ }
   }
 
   // Og tag fallback if Firecrawl wasn't available
