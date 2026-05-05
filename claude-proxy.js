@@ -41,7 +41,7 @@ exports.handler = async (event) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': JASPER_KEY },
           body: JSON.stringify({ inputs: { command } }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(8000),
         });
         if (!r.ok) return '';
         const d = await r.json();
@@ -119,17 +119,17 @@ exports.handler = async (event) => {
   let ogTitle = '';
   let ogDesc = '';
 
-  // Run homepage + top blog paths in parallel, 10s timeout each
   const fcFetch = (fcUrl) => FIRECRAWL_KEY
     ? fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
         body: JSON.stringify({ url: fcUrl, formats: ['markdown'] }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(5000),
       }).then(r => r.ok ? r.json() : null).catch(() => null)
     : Promise.resolve(null);
 
-  const blogPaths = ['/blog', '/news', '/articles', '/insights', '/resources', '/newsroom'];
+  // Run homepage + 3 most likely blog paths in parallel (fast)
+  const blogPaths = ['/blog', '/news', '/newsroom'];
   const [homeData, ...blogResults] = await Promise.all([
     fcFetch(clean),
     ...blogPaths.map(p => fcFetch('https://' + domain + p)),
@@ -137,18 +137,18 @@ exports.handler = async (event) => {
 
   if (homeData) {
     const meta = homeData.data?.metadata || homeData.metadata || {};
-    homeMarkdown = String(homeData.data?.markdown || homeData.data?.content || '').slice(0, 6000);
+    homeMarkdown = String(homeData.data?.markdown || homeData.data?.content || '').slice(0, 5000);
     ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
     ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
     ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
   }
 
-  // ── Step 2: pick first blog result with real content ──
+  // Pick first blog result with real content
   let blogMarkdown = '';
   for (const bd of blogResults) {
     if (!bd) continue;
     const md = String(bd.data?.markdown || bd.data?.content || '').trim();
-    if (md.length > 300) { blogMarkdown = md.slice(0, 5000); break; }
+    if (md.length > 300) { blogMarkdown = md.slice(0, 4000); break; }
   }
 
   // Og tag fallback if Firecrawl wasn't available
@@ -243,7 +243,7 @@ exports.handler = async (event) => {
           { role: 'user', content: userPrompt },
         ],
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!gptRes.ok) {
