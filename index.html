@@ -681,13 +681,13 @@ function DemoHub(){
     <HubLayout>
       {/* Hero */}
       <section style={{
-        minHeight:480,display:'flex',alignItems:'center',
+        minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
         background:config.heroImageUrl
-          ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center/cover no-repeat`
+          ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
           :`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
         position:'relative',overflow:'hidden',
       }}>
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'80px 32px',width:'100%'}}>
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
           <div style={{maxWidth:600}}>
             <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
               ⚡ Resource Hub
