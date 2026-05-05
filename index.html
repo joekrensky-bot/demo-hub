@@ -13,544 +13,22 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --brand-primary:#0f172a;--brand-accent:#6366f1;--brand-bg:#ffffff;
-  --brand-text:#0f172a;--brand-header-text:#ffffff;
-  --font-sans:'DM Sans',sans-serif;--font-serif:'DM Serif Display',serif;
-}
+:root{--brand-primary:#0f172a;--brand-accent:#6366f1;--brand-bg:#ffffff;--brand-text:#0f172a;--brand-header-text:#ffffff;--font-sans:'DM Sans',sans-serif;--font-serif:'DM Serif Display',serif;}
 html{font-size:16px;scroll-behavior:smooth}
 body{font-family:var(--font-sans);background:var(--brand-bg);color:var(--brand-text);line-height:1.6;-webkit-font-smoothing:antialiased}
-a{color:inherit;text-decoration:none}
-img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}img{max-width:100%;display:block}
 button{font-family:var(--font-sans);cursor:pointer;border:none}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:3px}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:3px}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes badgePop{from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel" data-presets="react">
-const {useState, useEffect, useContext, createContext, useRef, useCallback} = React;
 
-/* ─── CONSTANTS ─── */
-const DEFAULT_CONFIG = {
-  spaceId:'b4hc9l38hrco',
-  deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
-  prospectUrl:'',brandPrimary:'#0f172a',brandAccent:'#6366f1',
-  brandBg:'#f9f7f4',brandText:'#0f172a',brandHeaderText:'#ffffff',
-  companyName:'Content Hub',logoUrl:'',
-  heroHeadline:'Insights & Resources',
-  heroSubheading:'Stay ahead with the latest thinking from our team.',
-  heroImageUrl:'',
-  fallbackImageUrl:'https://picsum.photos/seed/fallback/800/450',heroImageUrl:'https://picsum.photos/seed/hero/1600/900',
-  articles:[],news:[],aboutText:'',products:[],generated:false,theme:'generic',
-};
-
-/* ─── CONTEXT ─── */
-const HubCtx = createContext(null);
-const useHub = () => useContext(HubCtx);
-
-/* ─── UTILS ─── */
-function applyBrandVars(c){
-  const r = document.documentElement;
-  r.style.setProperty('--brand-primary', c.brandPrimary);
-  r.style.setProperty('--brand-accent', c.brandAccent);
-  r.style.setProperty('--brand-bg', c.brandBg);
-  r.style.setProperty('--brand-text', c.brandText);
-  r.style.setProperty('--brand-header-text', c.brandHeaderText);
-}
-function bestTextColor(hex){
-  if(!hex||hex.length<4)return'#ffffff';
-  const r=parseInt(hex.slice(1,3),16)||0,g=parseInt(hex.slice(3,5),16)||0,b=parseInt(hex.slice(5,7),16)||0;
-  const L=0.2126*(r/255)+0.7152*(g/255)+0.0722*(b/255);
-  return L>0.35?'#0f172a':'#ffffff';
-}
-function getContrastLabel(bg,fg){
-  if(!bg||!fg||bg.length<4||fg.length<4)return'';
-  const lum=(hex)=>{
-    const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
-    return 0.2126*(r<=0.03928?r/12.92:Math.pow((r+0.055)/1.055,2.4))
-          +0.7152*(g<=0.03928?g/12.92:Math.pow((g+0.055)/1.055,2.4))
-          +0.0722*(b<=0.03928?b/12.92:Math.pow((b+0.055)/1.055,2.4));
-  };
-  try{
-    const l1=lum(bg),l2=lum(fg);
-    const ratio=(Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
-    if(ratio>=7)return'AAA ✓';
-    if(ratio>=4.5)return'AA ✓';
-    if(ratio>=3)return'AA Large';
-    return'Low ⚠';
-  }catch{return'';}
-}
-function fmtDate(d){
-  if(!d)return'';
-  try{return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch{return d;}
-}
-function fmtDateLong(d){
-  if(!d)return'';
-  try{return new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});}catch{return d;}
-}
-/* ─── THEMES ─── */
-const THEMES = {
-  generic: {
-    id:'generic', label:'Generic', emoji:'🌐',
-    description:'Warm · rounded · serif headlines',
-    overrides: {
-      brandBg:'#f9f7f4',
-      cardBg:'#ffffff', cardBorder:'#e2e8f0',
-      cardRadius:'14px', navRadius:'8px', btnRadius:'10px', badgeRadius:'20px',
-      heroFont:'DM Serif Display,serif', headingFont:'DM Serif Display,serif',
-      categoryStyle:'pill', sectionBg:'#f0ede8',
-      navShadow:'0 2px 16px rgba(0,0,0,0.15)',
-    }
-  },
-  b2btech: {
-    id:'b2btech', label:'B2B Tech', emoji:'⚙',
-    description:'Dark · monospace · sharp corners · cyan',
-    overrides: {
-      brandBg:'#080d14', brandText:'#e2e8f0',
-      cardBg:'#0a0f1a', cardBorder:'#1e3a5f',
-      cardRadius:'4px', navRadius:'2px', btnRadius:'2px', badgeRadius:'2px',
-      heroFont:'monospace', headingFont:'monospace',
-      categoryStyle:'tag', sectionBg:'#0a0f1a',
-      navShadow:'none', navBorderBottom:'1px solid #1e3a5f',
-      forceDark:true,
-    }
-  },
-  health: {
-    id:'health', label:'Health Sciences', emoji:'🏥',
-    description:'White nav · medical green · clean · trusted',
-    overrides: {
-      brandBg:'#f0f7f4',
-      cardBg:'#ffffff', cardBorder:'#d1e9df',
-      cardRadius:'12px', navRadius:'8px', btnRadius:'24px', badgeRadius:'24px',
-      heroFont:'DM Sans,sans-serif', headingFont:'DM Sans,sans-serif',
-      categoryStyle:'pill', sectionBg:'#e8f5ef',
-      navBg:'#ffffff', navTextColor:'#0f172a',
-      navShadow:'0 1px 8px rgba(0,0,0,0.06)',
-    }
-  },
-  finserv: {
-    id:'finserv', label:'Finserv', emoji:'🏦',
-    description:'Navy/gold · serif · square corners · formal',
-    overrides: {
-      brandBg:'#fafaf8',
-      cardBg:'#ffffff', cardBorder:'#e8e0d0',
-      cardRadius:'0px', navRadius:'0px', btnRadius:'0px', badgeRadius:'0px',
-      heroFont:'Georgia,serif', headingFont:'Georgia,serif',
-      categoryStyle:'label', sectionBg:'#f5f0e8',
-      navShadow:'none', navBorderBottom:'2px solid',
-    }
-  },
-  ecommerce: {
-    id:'ecommerce', label:'Ecommerce', emoji:'🛍',
-    description:'Energetic · pill badges · warm · playful',
-    overrides: {
-      brandBg:'#fff5f7',
-      cardBg:'#ffffff', cardBorder:'#fce7ec',
-      cardRadius:'16px', navRadius:'24px', btnRadius:'24px', badgeRadius:'24px',
-      heroFont:'DM Sans,sans-serif', headingFont:'DM Sans,sans-serif',
-      categoryStyle:'pill', sectionBg:'#fff0f4',
-      navBg:'#ffffff', navTextColor:'#0f172a',
-      navShadow:'0 1px 8px rgba(0,0,0,0.08)',
-    }
-  },
-};
-
-// Detect theme from industry hint
-function detectTheme(companyName, aboutText) {
-  const text = ((companyName||'') + ' ' + (aboutText||'')).toLowerCase();
-  if(/health|medical|clinic|pharma|biotech|hospital|care|patient|drug|therapy|science/i.test(text)) return 'health';
-  if(/bank|financ|invest|capital|fund|asset|wealth|insurance|payment|fintech|trading|credit/i.test(text)) return 'finserv';
-  if(/shop|retail|commerce|store|fashion|brand|consumer|beauty|apparel|marketplace/i.test(text)) return 'ecommerce';
-  if(/software|cloud|api|platform|data|enterprise|developer|saas|devops|cyber|security|network|tech/i.test(text)) return 'b2btech';
-  return 'generic';
-}
-
-function getThemeStyles(themeId, config) {
-  const t = THEMES[themeId] || THEMES.generic;
-  const o = t.overrides;
-  return {
-    brandBg: o.forceDark ? o.brandBg : (o.brandBg || config.brandBg || '#f9f7f4'),
-    brandText: o.forceDark ? o.brandText : (config.brandText || '#1a1a2e'),
-    cardBg: o.cardBg || '#ffffff',
-    cardBorder: o.cardBorder || '#e2e8f0',
-    cardRadius: o.cardRadius || '14px',
-    navRadius: o.navRadius || '8px',
-    btnRadius: o.btnRadius || '10px',
-    badgeRadius: o.badgeRadius || '20px',
-    heroFont: o.heroFont || 'DM Serif Display,serif',
-    headingFont: o.headingFont || 'DM Serif Display,serif',
-    categoryStyle: o.categoryStyle || 'pill',
-    sectionBg: o.sectionBg || '#f0ede8',
-    navBg: o.navBg || config.brandPrimary,
-    navTextColor: o.navTextColor || config.brandHeaderText,
-    navShadow: o.navShadow !== undefined ? o.navShadow : '0 2px 16px rgba(0,0,0,0.15)',
-    navBorderBottom: o.navBorderBottom || 'none',
-    forceDark: o.forceDark || false,
-  };
-}
-
-function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
-
-
-async function scrapeBrand(url, manual=false, mode='fast'){
-  const clean=url?(url.startsWith('http')?url:'https://'+url):'';
-  const res=await fetch('/.netlify/functions/claude-proxy',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({url:clean, manual, mode})
-  });
-  if(!res.ok){const e=await res.text();throw new Error('Proxy '+res.status+': '+e);}
-  const data=await res.json();
-  if(data.error)throw new Error(data.error);
-  return data;
-}
-
-/* ─── ROUTER (hash-based, no library) ─── */
-function useRoute(){
-  const [route,setRoute]=useState(()=>window.location.hash.slice(1)||'/setup');
-  useEffect(()=>{
-    const handler=()=>setRoute(window.location.hash.slice(1)||'/setup');
-    window.addEventListener('hashchange',handler);
-    return()=>window.removeEventListener('hashchange',handler);
-  },[]);
-  return route;
-}
-function navigate(path){window.location.hash=path;}
-
-/* ─── ROOT APP ─── */
-function App(){
-  const CONFIG_VERSION = '2025-05-04-v3';
-  const [config,setConfig]=useState(()=>{
-    try{
-      const s=localStorage.getItem('hub_config');
-      if(!s) return DEFAULT_CONFIG;
-      const parsed=JSON.parse(s);
-      // If version mismatch, wipe stale config
-      if(parsed._version !== CONFIG_VERSION){ localStorage.clear(); return DEFAULT_CONFIG; }
-      return{...DEFAULT_CONFIG,...parsed};
-    }
-    catch{return DEFAULT_CONFIG;}
-  });
-  const [contentfulItems,setContentfulItems]=useState([]);
-  const [lastRefresh,setLastRefresh]=useState(null);
-  const [refreshing,setRefreshing]=useState(false);
-  const route=useRoute();
-
-  const updateConfig=useCallback((updates)=>{
-    setConfig(prev=>{
-      const next={...prev,...updates};
-      localStorage.setItem('hub_config',JSON.stringify({...next,_version:CONFIG_VERSION}));
-      applyBrandVars(next);
-      return next;
-    });
-  },[]);
-
-  useEffect(()=>{applyBrandVars(config);},[]);
-
-  // Contentful polling — 15 min recency filter
-  const pollContentful=useCallback(async(manual=false)=>{
-    if(!config.generated)return;
-    if(manual)setRefreshing(true);
-    try{
-      const res=await fetch(`https://cdn.contentful.com/spaces/${config.spaceId}/entries?access_token=${config.deliveryKey}&content_type=landingPage&order=-sys.createdAt&limit=10`);
-      if(!res.ok)return;
-      const data=await res.json();
-      const fifteenMinsAgo=new Date(Date.now()-15*60*1000);
-      const items=(data.items||[])
-        .filter(item=>new Date(item.sys.createdAt)>fifteenMinsAgo)
-        .map(item=>{
-          const f=item.fields;
-          let imageUrl=`https://picsum.photos/seed/cf-${item.sys.id}/800/450`;
-          if(f.featuredImage&&data.includes){
-            const asset=data.includes.Asset?.find(a=>a.sys.id===f.featuredImage.sys.id);
-            if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
-          }
-          return{
-            id:item.sys.id,
-            title:f.title||f.name||f.headline||'Untitled',
-            slug:f.slug||f.pageSlug||item.sys.id,
-            body:f.body||f.content||f.pageContent||f.copy||'',
-            summary:(()=>{
-              const raw=f.summary||f.description||f.subtitle||f.excerpt||f.metaDescription||f.body||f.content||f.pageContent||f.copy||'';
-              const stripped=raw.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
-              return stripped.length>160?stripped.slice(0,157)+'…':stripped;
-            })(),
-            imageUrl,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
-            category:f.category||f.contentType||f.type||'Latest',
-            readTime:'5 min read',date:item.sys.createdAt,
-          };
-        });
-      setContentfulItems(items);
-      setLastRefresh(new Date());
-    }catch(e){}
-    finally{if(manual)setRefreshing(false);}
-  },[config.generated,config.spaceId,config.deliveryKey]);
-
-  useEffect(()=>{
-    if(!config.generated)return;
-    pollContentful();
-    const iv=setInterval(()=>pollContentful(),30000);
-    return()=>clearInterval(iv);
-  },[config.generated,config.spaceId,config.deliveryKey]);
-
-  // Enrich images with Unsplash after hub loads (non-blocking)
-  useEffect(()=>{
-    if(!config.generated)return;
-    const UNSPLASH_KEY='Rtko1nJ89-XlX5QfMqnp4ovSkMD37uAo5mApAwQlGHY';
-    const needsEnrichment=(items)=>items.some(a=>a.imageSource==='fallback'||!a.imageSource);
-    if(!needsEnrichment(config.articles||[])&&!needsEnrichment(config.news||[]))return;
-    const categoryToQuery=(category,title)=>{
-      const t=((category||'')+' '+(title||'')).toLowerCase();
-      if(t.includes('security')||t.includes('cyber'))return 'cybersecurity technology professional';
-      if(t.includes('ai')||t.includes('artificial'))return 'artificial intelligence technology';
-      if(t.includes('market'))return 'marketing team strategy meeting';
-      if(t.includes('content')||t.includes('writing'))return 'content creation laptop desk';
-      if(t.includes('growth')||t.includes('revenue'))return 'business growth success chart';
-      if(t.includes('data')||t.includes('analytic'))return 'data analytics dashboard';
-      if(t.includes('cloud')||t.includes('platform'))return 'cloud computing server technology';
-      if(t.includes('health')||t.includes('medical'))return 'healthcare medical professional';
-      if(t.includes('financ')||t.includes('invest'))return 'finance business professional';
-      if(t.includes('product')||t.includes('launch'))return 'product launch business team';
-      return 'business professional office team';
-    };
-    const fetchUnsplash=async(query,seed)=>{
-      try{
-        const r=await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=landscape&content_filter=high&per_page=10&client_id=${UNSPLASH_KEY}`);
-        if(!r.ok)return null;
-        const d=await r.json();
-        const results=d?.results||[];
-        if(!results.length)return null;
-        return results[seed%results.length]?.urls?.regular||null;
-      }catch{return null;}
-    };
-    const enrich=async()=>{
-      const articles=[...(config.articles||[])];
-      const news=[...(config.news||[])];
-      let changed=false;
-      for(let i=0;i<articles.length;i++){
-        if(articles[i].imageSource==='fallback'||!articles[i].imageSource){
-          const q=categoryToQuery(articles[i].category,articles[i].title);
-          const img=await fetchUnsplash(q,i);
-          if(img){articles[i]={...articles[i],imageUrl:img,imageSource:'unsplash'};changed=true;}
-        }
-      }
-      for(let i=0;i<news.length;i++){
-        if(news[i].imageSource==='fallback'||!news[i].imageSource){
-          const q=categoryToQuery(news[i].category,news[i].title);
-          const img=await fetchUnsplash(q,i+6);
-          if(img){news[i]={...news[i],imageUrl:img,imageSource:'unsplash'};changed=true;}
-        }
-      }
-      if(changed)updateConfig({articles,news});
-    };
-    enrich();
-  },[config.generated]);
-
-  // Route guard
-  const needsSetup=!config.generated;
-  const isSetupRoute=route==='/setup'||route==='/validate';
-  useEffect(()=>{
-    if(needsSetup&&!isSetupRoute)navigate('/setup');
-  },[needsSetup,isSetupRoute]);
-
-  const ctx={config,updateConfig,contentfulItems,DEFAULT_CONFIG,pollContentful,refreshing,lastRefresh,THEMES,detectTheme,getThemeStyles};
-
-  return(
-    <HubCtx.Provider value={ctx}>
-      {route==='/setup'&&<SetupPage/>}
-      {route==='/validate'&&<ValidatePage/>}
-      {config.generated&&route==='/demo'&&<DemoHub/>}
-      {config.generated&&route==='/demo/articles'&&<ArticlesPage/>}
-      {config.generated&&route.startsWith('/demo/articles/')&&<ArticleDetail slug={route.replace('/demo/articles/','')}/>}
-      {config.generated&&route==='/demo/news'&&<NewsPage/>}
-      {config.generated&&route.startsWith('/demo/news/')&&<NewsDetail slug={route.replace('/demo/news/','')}/>}
-      {config.generated&&route==='/demo/products'&&<ProductsPage/>}
-      {config.generated&&route==='/demo/about'&&<AboutPage/>}
-    </HubCtx.Provider>
-  );
-}
-
-/* ─── SETUP PAGE ─── */
-function SetupPage(){
-  const {config,updateConfig,DEFAULT_CONFIG}=useHub();
-  const [url,setUrl]=useState(config.prospectUrl||'');
-  const [scrapeMode,setScrapeMode]=useState('fast'); // 'fast' or 'deep'
-  const [spaceId,setSpaceId]=useState(config.spaceId||DEFAULT_CONFIG.spaceId);
-  const [deliveryKey,setDeliveryKey]=useState(config.deliveryKey||DEFAULT_CONFIG.deliveryKey);
-  const [loading,setLoading]=useState(false);
-  const [loadingMsg,setLoadingMsg]=useState('');
-  const [error,setError]=useState('');
-  const [showManual,setShowManual]=useState(false);
-  const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
-
-  const steps=[
-  '🐱 Wrangling kitties…',
-  '☕ Grab a coffee, this takes ~15s…',
-  '🔍 Scouring the internet for real content…',
-  '🎨 Extracting brand vibes…',
-  '✍️ Ghost-writing 6 articles…',
-  '📰 Rounding up the news…',
-  '🧠 Teaching GPT about your prospect…',
-  '🖼️ Hunting for good images…',
-  '💅 Making it look pretty…',
-  '🚀 Almost ready, hang tight…',
-  '🐌 Still going — totally worth the wait…',
-  '✨ Putting on the finishing touches…',
-];
-
-  const handleAnalyze=async()=>{
-    if(!url.trim()){setError('Please enter a prospect URL');return;}
-    setError('');setLoading(true);
-    let i=0;setLoadingMsg(steps[0]);
-    const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},1500);
-    try{
-      const brand=await scrapeBrand(url.trim(), false, scrapeMode);
-      clearInterval(iv);
-      const autoTheme=detectTheme(brand.companyName, brand.aboutText);
-      // Wipe entire localStorage then set fresh config
-      localStorage.clear();
-      updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme,generated:false});
-      navigate('/validate');
-    }catch(e){
-      // Auto-retry once
-      try{
-        setLoadingMsg('🔄 First attempt timed out — trying again…');
-        const brand2=await scrapeBrand(url.trim());
-        clearInterval(iv);
-        const autoTheme2=detectTheme(brand2.companyName, brand2.aboutText);
-        localStorage.clear();
-        updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand2,theme:autoTheme2,generated:false});
-        navigate('/validate');
-      }catch(e2){
-        clearInterval(iv);
-        setError('😅 Still failing: ' + (e2.message||String(e2)) + ' — try manual setup or a different URL');
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleManual=async()=>{
-    // Path A: Jasper-generated content with manual colors
-    setError('');setLoading(true);
-    let i=0;setLoadingMsg('Generating content with Jasper…');
-    const iv=setInterval(()=>{
-      const msgs=['Generating articles with Jasper…','Writing news items…','Building your hub…'];
-      i=(i+1)%msgs.length;setLoadingMsg(msgs[i]);
-    },2500);
-    try{
-      const companyName=url.trim()?url.trim().replace(/https?:\/\//,'').split('/')[0]:'Content Hub';
-      const brand=await scrapeBrand(companyName, true);
-      clearInterval(iv);
-      updateConfig({prospectUrl:'',spaceId,deliveryKey,...manual,
-        brandHeaderText:bestTextColor(manual.brandPrimary),
-        companyName,
-        articles: brand.articles||[],
-        news: brand.news||[],
-        aboutText: brand.aboutText||'',
-        products: brand.products||[],
-      });
-      navigate('/validate');
-    }catch(e){
-      clearInterval(iv);
-      setError('Jasper error: '+(e.message||String(e)));
-      setLoading(false);
-    }
-  };
-
-  return(
-    <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 16px 40px',fontFamily:'DM Sans,sans-serif'}}>
-      <div style={{width:'100%',maxWidth:560}}>
-        {/* Logo badge */}
-        <div style={{display:'flex',justifyContent:'center',marginBottom:32}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid #e2e8f0',borderRadius:100,padding:'8px 16px 8px 10px',fontSize:14,fontWeight:600,color:'#0f172a',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
-            <JasperIcon size={28}/>
-            Jasper Demo Hub Builder
-          </div>
-        </div>
-
-        <div style={{background:'white',borderRadius:20,padding:'36px 40px',boxShadow:'0 4px 32px rgba(0,0,0,0.08)',border:'1px solid #e2e8f0'}}>
-          <h1 style={{fontSize:26,fontWeight:600,color:'#0f172a',marginBottom:8,letterSpacing:'-0.3px'}}>Build a branded content hub</h1>
-          <p style={{fontSize:15,color:'#64748b',lineHeight:1.6,marginBottom:28}}>Enter your prospect's URL — we'll extract their brand identity and generate a live demo hub styled to match.</p>
-
-          {/* URL */}
-          <div style={{marginBottom:16}}>
-            <label style={{display:'block',fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>Prospect / Customer URL</label>
-            <div style={{display:'flex',alignItems:'center',border:'1.5px solid',borderColor:'#e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
-              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center'}}>https://</span>
-              <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleAnalyze()}
-                placeholder="jasper.ai" disabled={loading}
-                style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
-            </div>
-          </div>
-
-
-
-
-
-          {/* Scrape mode toggle */}
-          <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
-            <div style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em'}}>Analysis mode</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              <button onClick={()=>setScrapeMode('fast')}
-                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
-                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>SERP + GPT content. ~8s, reliable. Real article titles from search.</div>
-              </button>
-              <button onClick={()=>setScrapeMode('deep')}
-                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
-                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full page scrape for images + copy. ~20s, may timeout on some sites.</div>
-              </button>
-            </div>
-          </div>
-
-          ang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Jasper Content Hub Builder</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --brand-primary:#0f172a;--brand-accent:#6366f1;--brand-bg:#ffffff;
-  --brand-text:#0f172a;--brand-header-text:#ffffff;
-  --font-sans:'DM Sans',sans-serif;--font-serif:'DM Serif Display',serif;
-}
-html{font-size:16px;scroll-behavior:smooth}
-body{font-family:var(--font-sans);background:var(--brand-bg);color:var(--brand-text);line-height:1.6;-webkit-font-smoothing:antialiased}
-a{color:inherit;text-decoration:none}
-img{max-width:100%;display:block}
-button{font-family:var(--font-sans);cursor:pointer;border:none}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:3px}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-@keyframes badgePop{from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-</style>
-</head>
-<body>
-<div id="root"></div>
-
-<script type="text/babel" data-presets="react">
 const {useState, useEffect, useContext, createContext, useRef, useCallback} = React;
 
 /* ─── CONSTANTS ─── */
@@ -910,6 +388,180 @@ function ThemeToggle({value, onChange}){
           <span style={{fontSize:10,fontWeight:value===t.id?600:400,color:value===t.id?'#6366f1':'#374151',lineHeight:1.2,textAlign:'center'}}>{t.label}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+
+/* ─── SETUP PAGE ─── */
+function SetupPage(){
+  const {config,updateConfig,DEFAULT_CONFIG,detectTheme,THEMES}=useHub();
+  const [url,setUrl]=useState(config.prospectUrl||'');
+  const [scrapeMode,setScrapeMode]=useState('fast');
+  const [loading,setLoading]=useState(false);
+  const [loadingMsg,setLoadingMsg]=useState('');
+  const [error,setError]=useState('');
+  const [showManual,setShowManual]=useState(false);
+  const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
+
+  const steps=[
+    '🐱 Wrangling kitties...',
+    '☕ Grab a coffee, this takes ~15s...',
+    '🔍 Scouring the internet for real content...',
+    '🎨 Extracting brand vibes...',
+    '✍️ Ghost-writing articles...',
+    '📰 Rounding up the news...',
+    '🧠 Teaching GPT about your prospect...',
+    '🖼️ Hunting for good images...',
+    '💅 Making it look pretty...',
+    '🚀 Almost ready, hang tight...',
+    '🐌 Still going — totally worth the wait...',
+    '✨ Putting on the finishing touches...',
+  ];
+
+  const handleAnalyze=async()=>{
+    if(!url.trim()){setError('Please enter a prospect URL');return;}
+    setError('');setLoading(true);
+    let i=0;setLoadingMsg(steps[0]);
+    const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},1500);
+    const doScrape=async()=>{
+      const clean=url.trim().startsWith('http')?url.trim():'https://'+url.trim();
+      const res=await fetch('/.netlify/functions/claude-proxy',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({url:clean,mode:scrapeMode})
+      });
+      if(!res.ok)throw new Error('Proxy '+res.status+': '+await res.text());
+      const data=await res.json();
+      if(data.error)throw new Error(data.error);
+      return data;
+    };
+    try{
+      const brand=await doScrape();
+      clearInterval(iv);
+      const autoTheme=detectTheme(brand.companyName,brand.aboutText);
+      localStorage.clear();
+      updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId:DEFAULT_CONFIG.spaceId,deliveryKey:DEFAULT_CONFIG.deliveryKey,...brand,theme:autoTheme,generated:false});
+      navigate('/validate');
+    }catch(e){
+      try{
+        setLoadingMsg('🔄 First attempt timed out — trying again...');
+        const brand2=await doScrape();
+        clearInterval(iv);
+        const autoTheme2=detectTheme(brand2.companyName,brand2.aboutText);
+        localStorage.clear();
+        updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),...brand2,theme:autoTheme2,generated:false});
+        navigate('/validate');
+      }catch(e2){
+        clearInterval(iv);
+        setError('😅 ' + (e2.message||String(e2)));
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleManual=async()=>{
+    setError('');setLoading(true);setLoadingMsg('✦ Generating content with Jasper...');
+    try{
+      const companyName=url.trim()?url.trim().replace(/https?:\/\//,'').split('/')[0]:'Content Hub';
+      const res=await fetch('/.netlify/functions/claude-proxy',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({url:companyName,manual:true})
+      });
+      if(!res.ok)throw new Error('Proxy '+res.status);
+      const brand=await res.json();
+      if(brand.error)throw new Error(brand.error);
+      updateConfig({...DEFAULT_CONFIG,...manual,brandHeaderText:bestTextColor(manual.brandPrimary),
+        companyName,articles:brand.articles||[],news:brand.news||[],aboutText:brand.aboutText||'',products:brand.products||[]});
+      navigate('/validate');
+    }catch(e){
+      setError('Error: '+(e.message||String(e)));
+      setLoading(false);
+    }
+  };
+
+  return(
+    <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 16px 40px',fontFamily:'DM Sans,sans-serif'}}>
+      <div style={{width:'100%',maxWidth:560}}>
+        <div style={{display:'flex',justifyContent:'center',marginBottom:32}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid #e2e8f0',borderRadius:100,padding:'8px 16px 8px 10px',fontSize:14,fontWeight:600,color:'#0f172a',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
+            <JasperIcon size={28}/>Jasper Demo Hub Builder
+          </div>
+        </div>
+        <div style={{background:'white',borderRadius:20,padding:'36px 40px',boxShadow:'0 4px 32px rgba(0,0,0,0.08)',border:'1px solid #e2e8f0'}}>
+          <h1 style={{fontSize:26,fontWeight:600,color:'#0f172a',marginBottom:8,letterSpacing:'-0.3px'}}>Build a branded content hub</h1>
+          <p style={{fontSize:15,color:'#64748b',lineHeight:1.6,marginBottom:28}}>Enter your prospect URL — we extract their brand and generate a live demo hub.</p>
+          <div style={{marginBottom:16}}>
+            <label style={{display:'block',fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>Prospect / Customer URL</label>
+            <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
+              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center'}}>https://</span>
+              <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!showManual&&handleAnalyze()}
+                placeholder="jasper.ai" disabled={loading}
+                style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
+            </div>
+          </div>
+          {/* Analysis mode toggle */}
+          <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+            <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Analysis mode</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <button onClick={()=>setScrapeMode('fast')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>SERP titles + GPT. ~8s, reliable.</div>
+              </button>
+              <button onClick={()=>setScrapeMode('deep')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full scrape + real images. ~20s.</div>
+              </button>
+            </div>
+          </div>
+          {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:16}}>⚠ {error}</div>}
+          {!loading
+            ?<button onClick={handleAnalyze} disabled={showManual}
+              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'pointer',opacity:showManual?0.5:1}}
+              onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
+              ✦ Analyze Site &amp; Build Hub
+            </button>
+            :<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:14,background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:12}}>
+              <div style={{width:20,height:20,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
+              <span style={{fontSize:14,color:'#FF4F00',fontWeight:500}}>{loadingMsg}</span>
+            </div>
+          }
+          <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0 12px',color:'#94a3b8',fontSize:13}}>
+            <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>or set up manually<div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
+          </div>
+          <button onClick={()=>setShowManual(v=>!v)} disabled={loading}
+            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:'transparent',border:'1.5px dashed #cbd5e1',color:'#64748b',borderRadius:10,padding:10,fontSize:14,fontFamily:'DM Sans,sans-serif',cursor:'pointer'}}>
+            ⚙ {showManual?'Hide manual setup':'Choose colors manually (Jasper generates content)'}
+          </button>
+          {showManual&&(
+            <div style={{marginTop:16,padding:20,background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                {[['Header / Nav','brandPrimary'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
+                  <div key={key}>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>{label}</label>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <input type="color" value={manual[key]} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                        style={{width:36,height:36,borderRadius:8,border:'1.5px solid #e2e8f0',cursor:'pointer',padding:2}}/>
+                      <input type="text" value={manual[key]} maxLength={7} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                        style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:12,fontFamily:'monospace',height:36,outline:'none',color:'#374151'}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleManual} disabled={loading}
+                style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:'pointer'}}>
+                Generate with Jasper →
+              </button>
+            </div>
+          )}
+        </div>
+        <p style={{textAlign:'center',marginTop:24,fontSize:13,color:'#94a3b8'}}>
+          ⚡ Powered by <strong style={{color:'#FF4F00'}}>Jasper AI</strong>
+          {' · '}<button onClick={()=>{localStorage.clear();window.location.reload();}}
+            style={{background:'none',border:'none',color:'#94a3b8',fontSize:13,cursor:'pointer',textDecoration:'underline',fontFamily:'DM Sans,sans-serif',padding:0}}>Reset</button>
+        </p>
+      </div>
     </div>
   );
 }
@@ -1652,6 +1304,7 @@ function JasperIcon({size=32}){
 /* ─── MOUNT ─── */
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
+
 </script>
 </body>
 </html>
