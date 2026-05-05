@@ -12,92 +12,95 @@ exports.handler = async (event) => {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_API_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY not set' }) };
 
+  let url = '';
   try {
-    const { url } = JSON.parse(event.body);
-    const clean = url.startsWith('http') ? url : 'https://' + url;
-    const domain = clean.replace(/https?:\/\//, '').split('/')[0];
+    const body = JSON.parse(event.body);
+    url = body.url || '';
+  } catch(e) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request body' }) };
+  }
 
-    // ── 1. Scrape homepage for og tags (fast, free) ──
-    let ogImage = '', ogTitle = '', ogDescription = '';
-    try {
-      const pageRes = await fetch(clean, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'text/html' },
-        signal: AbortSignal.timeout(6000),
-        redirect: 'follow',
-      });
-      if (pageRes.ok) {
-        const html = await pageRes.text();
-        const ogImg = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-          || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-        if (ogImg) ogImage = ogImg[1].trim().replace(/&amp;/g, '&');
+  const clean = url.startsWith('http') ? url : 'https://' + url;
+  const domain = clean.replace(/https?:\/\//, '').split('/')[0];
 
-        const ogT = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
-        if (ogT) ogTitle = ogT[1].trim();
-        else { const t = html.match(/<title[^>]*>([^<]+)<\/title>/i); if (t) ogTitle = t[1].trim(); }
+  // ── 1. Scrape og tags from homepage ──
+  let ogImage = '', ogTitle = '', ogDescription = '';
+  try {
+    const pageRes = await fetch(clean, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(6000),
+    });
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const m1 = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+               || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+               || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      if (m1) ogImage = m1[1].trim().replace(/&amp;/g, '&');
 
-        const ogD = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
-          || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
-        if (ogD) ogDescription = ogD[1].trim();
-      }
-    } catch(e) {}
+      const m2 = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+               || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      if (m2) ogTitle = m2[1].trim();
+      else { const t = html.match(/<title[^>]*>([^<]+)<\/title>/i); if (t) ogTitle = t[1].trim(); }
 
-    // ── 2. Responses API with web_search_preview ──
-    const prompt = `You are building a branded content hub for ${clean}.
+      const m3 = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+               || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
+               || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      if (m3) ogDescription = m3[1].trim();
+    }
+  } catch(e) { /* silent */ }
 
-Your job: use web search to find REAL content from this site. Search for:
-1. "${domain} blog articles" or "${domain} news" — find real recent articles with titles, dates, summaries
-2. "${domain} brand colors" or visit the homepage — identify their real hex color palette  
-3. "${domain} products" — find their real product/service names
+  // ── 2. Call GPT-4o with chat/completions (known working) ──
+  const prompt = `You are building a branded content hub for ${clean} (domain: ${domain}).
 
-${ogImage ? `Hero image (use this URL exactly): ${ogImage}` : ''}
-${ogTitle ? `Page title: ${ogTitle}` : ''}
-${ogDescription ? `Page description: ${ogDescription}` : ''}
+${ogTitle ? `Real page title: "${ogTitle}"` : ''}
+${ogDescription ? `Real page description: "${ogDescription}"` : ''}
 
-Return ONLY valid JSON (no markdown, no code blocks):
+Use your knowledge of this company to generate accurate, on-brand content. Return ONLY valid JSON:
 {
   "companyName": "real company name",
-  "brandPrimary": "#hex real dominant nav/header color",
-  "brandAccent": "#hex real CTA button color",
+  "brandPrimary": "#hex their real dominant nav/header color",
+  "brandAccent": "#hex their real CTA button color",
   "brandBg": "#f9f7f4",
   "brandText": "#1a1a2e",
-  "brandHeaderText": "#hex white if dark header",
-  "heroHeadline": "real tagline or compelling headline from their site (max 8 words)",
-  "heroSubheading": "real value proposition from their site (1 sentence)",
-  "heroImageUrl": "${ogImage || ''}",
+  "brandHeaderText": "#hex - white if dark header, dark if light header",
+  "heroHeadline": "${ogTitle ? `rephrase this for a content hub (max 8 words): ${ogTitle}` : 'compelling headline based on their real brand positioning, max 8 words'}",
+  "heroSubheading": "${ogDescription ? `rephrase: ${ogDescription}` : 'their real value proposition in one sentence'}",
+  "heroImageUrl": "",
   "articles": [
     {
-      "title": "REAL article title found on their blog/news page",
-      "summary": "actual summary of that article content",
-      "slug": "lowercase-hyphenated-slug",
-      "category": "real category label used on the site",
-      "readTime": "X min read",
-      "date": "YYYY-MM-DD",
-      "body": "<p>Substantive opening paragraph based on the real article.</p><h2>Key section heading</h2><p>Detailed paragraph expanding on the topic.</p><p>Another paragraph with specific insights.</p><blockquote><p>A relevant quote or key stat from the article.</p></blockquote><p>Closing paragraph with takeaways.</p>"
+      "title": "specific article title that could realistically appear on this company's blog",
+      "summary": "2-3 sentence summary grounded in this company's actual products and industry",
+      "slug": "lowercase-hyphenated",
+      "category": "real category this company would use",
+      "readTime": "5 min read",
+      "date": "2025-04-15",
+      "body": "<p>Substantive opening paragraph specific to this company.</p><h2>Relevant section heading</h2><p>Detailed paragraph with specific insights about their industry.</p><p>Another paragraph expanding on practical applications.</p><blockquote><p>A relevant insight or quote.</p></blockquote><p>Closing paragraph with actionable takeaways.</p>"
     }
   ],
   "news": [
     {
-      "title": "REAL news headline from the site or recent press coverage",
-      "summary": "actual news summary",
-      "slug": "lowercase-hyphenated-slug",
+      "title": "plausible recent news headline for this company",
+      "summary": "1-2 sentences",
+      "slug": "lowercase-hyphenated",
       "category": "News",
       "readTime": "2 min read",
-      "date": "YYYY-MM-DD",
-      "body": "<p>News content paragraph.</p><p>Additional context and detail.</p>"
+      "date": "2025-04-20",
+      "body": "<p>News detail paragraph.</p><p>Additional context.</p>"
     }
   ],
-  "aboutText": "Real company description based on what you find on their site. 2-3 paragraphs.",
+  "aboutText": "Accurate 2-3 paragraph company description based on what you know about them.",
   "products": [
-    {"name": "real product name", "description": "real product description from their site", "cta": "Learn more"}
+    {"name": "real product/service name", "description": "accurate description", "cta": "Learn more"}
   ]
 }
+Generate exactly 6 articles and 6 news items. Be specific to this company — not generic.`;
 
-Find exactly 6 real articles and 6 real news items. Use actual content from the site — real titles, real dates, real categories. If some pages block access, use your best knowledge of this specific company's content. All slugs lowercase-hyphenated.`;
-
-    const responsesRes = await fetch('https://api.openai.com/v1/responses', {
+  try {
+    const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,55 +108,22 @@ Find exactly 6 real articles and 6 real news items. Use actual content from the 
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        tools: [{ type: 'web_search_preview' }],
-        input: prompt,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'You are a brand content expert. Return valid JSON only, no markdown, no code blocks.' },
+          { role: 'user', content: prompt },
+        ],
       }),
     });
 
-    let brand;
-
-    if (responsesRes.ok) {
-      // ── Responses API path ──
-      const responsesData = await responsesRes.json();
-      const outputText = (responsesData.output || [])
-        .filter(o => o.type === 'message')
-        .flatMap(o => o.content || [])
-        .filter(c => c.type === 'output_text')
-        .map(c => c.text)
-        .join('');
-
-      const jsonMatch = outputText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON in response: ' + outputText.slice(0, 300));
-      brand = JSON.parse(jsonMatch[0]);
-
-    } else {
-      // ── Fallback: chat/completions without search ──
-      const chatRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 4000,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: 'You are a brand analyst. Return valid JSON only.' },
-            { role: 'user', content: prompt },
-          ],
-        }),
-      });
-      if (!chatRes.ok) {
-        const e = await chatRes.text();
-        return { statusCode: chatRes.status, headers, body: JSON.stringify({ error: e }) };
-      }
-      const chatData = await chatRes.json();
-      brand = JSON.parse(chatData.choices[0].message.content);
+    if (!gptRes.ok) {
+      const errText = await gptRes.text();
+      return { statusCode: gptRes.status, headers, body: JSON.stringify({ error: `OpenAI ${gptRes.status}: ${errText}` }) };
     }
 
-    // Always use the og:image we scraped — never GPT's guessed image URL
-    if (ogImage) brand.heroImageUrl = ogImage;
+    const gptData = await gptRes.json();
+    const brand = JSON.parse(gptData.choices[0].message.content);
 
     const mapItem = (a, i, type) => ({
       id: `${type}-${i}`,
@@ -182,7 +152,7 @@ Find exactly 6 real articles and 6 real news items. Use actual content from the 
         logoUrl: `https://logo.clearbit.com/${domain}`,
         heroHeadline: brand.heroHeadline || ogTitle || 'Insights & Resources',
         heroSubheading: brand.heroSubheading || ogDescription || 'Stay ahead with the latest thinking.',
-        heroImageUrl: ogImage || brand.heroImageUrl || '',
+        heroImageUrl: ogImage || '',
         articles: (brand.articles || []).slice(0, 6).map((a, i) => mapItem(a, i, 'article')),
         news: (brand.news || []).slice(0, 6).map((n, i) => mapItem(n, i, 'news')),
         aboutText: brand.aboutText || '',
@@ -190,7 +160,7 @@ Find exactly 6 real articles and 6 real news items. Use actual content from the 
       }),
     };
 
-  } catch (err) {
+  } catch(err) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
