@@ -236,7 +236,7 @@ exports.handler = async (event) => {
       const jasperDocPromise = (JASPER_KEY && jasperUserId && (articleContent || articleDesc || articleTitle))
         ? (log('creating Jasper doc'), fetch('https://api.jasper.ai/v1/documents', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-Key': JASPER_KEY, 'x-api-key': JASPER_KEY },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': JASPER_KEY.split(':')[0], 'x-api-key': JASPER_KEY.split(':')[0] },
             body: JSON.stringify({
               userId: jasperUserId,
               name: articleTitle || ('Featured Article — ' + domain),
