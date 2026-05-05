@@ -182,38 +182,6 @@ function getThemeStyles(themeId, config) {
 
 function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
 
-/* ─── THEMES ─── */
-const THEMES = {
-  generic: {id:'generic',label:'Generic',emoji:'🌐',description:'Warm · rounded · serif headlines',overrides:{brandBg:'#f9f7f4',cardBg:'#ffffff',cardBorder:'#e2e8f0',cardRadius:'14px',navRadius:'8px',btnRadius:'10px',badgeRadius:'20px',heroFont:'DM Serif Display,serif',headingFont:'DM Serif Display,serif',categoryStyle:'pill',sectionBg:'#f0ede8',navShadow:'0 2px 16px rgba(0,0,0,0.15)'}},
-  b2btech: {id:'b2btech',label:'B2B Tech',emoji:'⚙',description:'Dark · monospace · sharp corners · cyan',overrides:{brandBg:'#080d14',brandText:'#e2e8f0',cardBg:'#0a0f1a',cardBorder:'#1e3a5f',cardRadius:'4px',navRadius:'2px',btnRadius:'2px',badgeRadius:'2px',heroFont:'monospace',headingFont:'monospace',categoryStyle:'tag',sectionBg:'#0a0f1a',navShadow:'none',navBorderBottom:'1px solid #1e3a5f',forceDark:true}},
-  health: {id:'health',label:'Health Sciences',emoji:'🏥',description:'White nav · medical green · clean · trusted',overrides:{brandBg:'#f0f7f4',cardBg:'#ffffff',cardBorder:'#d1e9df',cardRadius:'12px',navRadius:'8px',btnRadius:'24px',badgeRadius:'24px',heroFont:'DM Sans,sans-serif',headingFont:'DM Sans,sans-serif',categoryStyle:'pill',sectionBg:'#e8f5ef',navBg:'#ffffff',navTextColor:'#0f172a',navShadow:'0 1px 8px rgba(0,0,0,0.06)'}},
-  finserv: {id:'finserv',label:'Finserv',emoji:'🏦',description:'Navy/gold · serif · square corners · formal',overrides:{brandBg:'#fafaf8',cardBg:'#ffffff',cardBorder:'#e8e0d0',cardRadius:'0px',navRadius:'0px',btnRadius:'0px',badgeRadius:'0px',heroFont:'Georgia,serif',headingFont:'Georgia,serif',categoryStyle:'label',sectionBg:'#f5f0e8',navShadow:'none',navBorderBottom:'2px solid'}},
-  ecommerce: {id:'ecommerce',label:'Ecommerce',emoji:'🛍',description:'Energetic · pill badges · warm · playful',overrides:{brandBg:'#fff5f7',cardBg:'#ffffff',cardBorder:'#fce7ec',cardRadius:'16px',navRadius:'24px',btnRadius:'24px',badgeRadius:'24px',heroFont:'DM Sans,sans-serif',headingFont:'DM Sans,sans-serif',categoryStyle:'pill',sectionBg:'#fff0f4',navBg:'#ffffff',navTextColor:'#0f172a',navShadow:'0 1px 8px rgba(0,0,0,0.08)'}},
-};
-function detectTheme(companyName,aboutText){
-  const text=((companyName||'')+' '+(aboutText||'')).toLowerCase();
-  if(/health|medical|clinic|pharma|biotech|hospital|care|patient|drug|therapy/i.test(text))return 'health';
-  if(/bank|financ|invest|capital|fund|asset|wealth|insurance|payment|fintech|trading/i.test(text))return 'finserv';
-  if(/shop|retail|commerce|store|fashion|brand|consumer|beauty|apparel|marketplace/i.test(text))return 'ecommerce';
-  if(/software|cloud|api|platform|data|enterprise|developer|saas|devops|cyber|security|network/i.test(text))return 'b2btech';
-  return 'generic';
-}
-function getThemeStyles(themeId,config){
-  const t=THEMES[themeId]||THEMES.generic;
-  const o=t.overrides;
-  return{
-    brandBg:o.forceDark?o.brandBg:(o.brandBg||config.brandBg||'#f9f7f4'),
-    brandText:o.forceDark?o.brandText:(config.brandText||'#1a1a2e'),
-    cardBg:o.cardBg||'#ffffff',cardBorder:o.cardBorder||'#e2e8f0',
-    cardRadius:o.cardRadius||'14px',navRadius:o.navRadius||'8px',
-    btnRadius:o.btnRadius||'10px',badgeRadius:o.badgeRadius||'20px',
-    heroFont:o.heroFont||'DM Serif Display,serif',headingFont:o.headingFont||'DM Serif Display,serif',
-    categoryStyle:o.categoryStyle||'pill',sectionBg:o.sectionBg||'#f0ede8',
-    navBg:o.navBg||config.brandPrimary,navTextColor:o.navTextColor||config.brandHeaderText,
-    navShadow:o.navShadow!==undefined?o.navShadow:'0 2px 16px rgba(0,0,0,0.15)',
-    navBorderBottom:o.navBorderBottom||'none',forceDark:o.forceDark||false,
-  };
-}
 
 async function scrapeBrand(url, manual=false){
   const clean=url?(url.startsWith('http')?url:'https://'+url):'';
