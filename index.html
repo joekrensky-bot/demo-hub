@@ -85,7 +85,7 @@ async function scrapeBrand(url){
   const clean=url.startsWith('http')?url:'https://'+url;
   const domain=clean.replace(/https?:\/\//,'').split('/')[0];
   const prompt=`Analyze the website at ${clean} and return ONLY valid JSON, no markdown:
-{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
+{"companyName":"string","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#hex","brandText":"#hex","brandHeaderText":"#hex","logoUrl":"https://logo.clearbit.com/${domain}","heroHeadline":"pull the ACTUAL headline or tagline text from the site homepage — do not invent one","heroSubheading":"pull the ACTUAL subheadline or description text from the site homepage — do not invent one","heroImageUrl":"find the og:image or hero background image URL from the site — must be a direct image URL (jpg/png/webp), empty string if none found","articles":[{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-03-15","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04-01","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}
 Generate exactly 6 articles and 6 news items thematic to this brand. Extract REAL brand colors. Slugs lowercase-hyphenated.`;
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
@@ -113,7 +113,7 @@ Generate exactly 6 articles and 6 news items thematic to this brand. Extract REA
     logoUrl:b.logoUrl||`https://logo.clearbit.com/${domain}`,
     heroHeadline:b.heroHeadline||'Insights & Resources',
     heroSubheading:b.heroSubheading||'Stay ahead with the latest thinking.',
-    heroImageUrl:b.heroImageUrl||'',
+    heroImageUrl:(b.heroImageUrl&&(b.heroImageUrl.includes('http')))?b.heroImageUrl:'',
     articles:(b.articles||[]).slice(0,6).map((a,i)=>mapItem(a,i,'article')),
     news:(b.news||[]).slice(0,6).map((n,i)=>mapItem(n,i,'news')),
     aboutText:b.aboutText||'',products:b.products||[],
@@ -499,13 +499,13 @@ function MiniPreview({config:c}){
   return(
     <div style={{width:'100%',maxWidth:680,borderRadius:16,overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,0.12)',border:'1px solid #e2e8f0'}}>
       <div style={{background:c.brandPrimary,padding:'12px 20px',display:'flex',alignItems:'center',gap:12}}>
-        {c.logoUrl&&<img src={c.logoUrl} alt="" style={{height:22,objectFit:'contain',filter:'brightness(0) invert(1)'}} onError={e=>e.target.style.display='none'}/>}
+        {c.logoUrl&&<img src={c.logoUrl} alt="" style={{height:22,objectFit:'contain',filter:c.brandHeaderText==='#ffffff'||c.brandHeaderText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>e.target.style.display='none'}/>}
         <span style={{fontSize:15,fontWeight:700,color:c.brandHeaderText,flex:1}}>{c.companyName||'Content Hub'}</span>
         <div style={{display:'flex',gap:12}}>
-          {['Home','Articles','News','About'].map(n=><span key={n} style={{fontSize:11,color:c.brandHeaderText,opacity:0.75}}>{n}</span>)}
+          {['Home','Products','Articles','News','About'].map(n=><span key={n} style={{fontSize:11,color:c.brandHeaderText,opacity:0.75}}>{n}</span>)}
         </div>
       </div>
-      <div style={{background:c.heroImageUrl?`linear-gradient(rgba(0,0,0,0.45),rgba(0,0,0,0.45)),url(${c.heroImageUrl}) center/cover`:c.brandPrimary,padding:'28px 24px'}}>
+      <div style={{background:`linear-gradient(rgba(0,0,0,0.4),rgba(0,0,0,0.4)),url(${c.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=60'}) center/cover`,padding:'28px 24px'}}>
         <div style={{fontFamily:'DM Serif Display,serif',fontSize:22,color:'white',marginBottom:6}}>{c.heroHeadline||'Insights & Resources'}</div>
         <div style={{fontSize:13,color:'rgba(255,255,255,0.75)',marginBottom:14}}>{c.heroSubheading}</div>
         <div style={{background:c.brandAccent,display:'inline-block',padding:'7px 16px',borderRadius:8,fontSize:13,fontWeight:600,color:'white'}}>Explore →</div>
@@ -547,7 +547,7 @@ function HubLayout({children}){
       <nav style={{background:config.brandPrimary,position:'sticky',top:0,zIndex:100,boxShadow:'0 2px 16px rgba(0,0,0,0.15)'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px',height:64,display:'flex',alignItems:'center',gap:32}}>
           <a href="#/demo" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
-            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:'brightness(0) invert(1)'}} onError={e=>e.target.style.display='none'}/>}
+            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:config.brandHeaderText==='#ffffff'||config.brandHeaderText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
             <span style={{fontSize:17,fontWeight:700,color:config.brandHeaderText,letterSpacing:'-0.2px'}}>{config.companyName}</span>
           </a>
           <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
@@ -574,7 +574,7 @@ function HubLayout({children}){
       <footer style={{background:config.brandPrimary}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'40px 32px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:40,borderBottom:'1px solid rgba(255,255,255,0.1)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
-            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:20,filter:'brightness(0) invert(1)',opacity:0.6}} onError={e=>e.target.style.display='none'}/>}
+            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:20,filter:config.brandHeaderText==='#ffffff'||config.brandHeaderText==='#fff'?'brightness(0) invert(1)':'none',opacity:0.8}} onError={e=>e.target.style.display='none'}/>}
             <span style={{fontSize:16,fontWeight:600,color:config.brandHeaderText}}>{config.companyName}</span>
           </div>
           <div style={{display:'flex',gap:24}}>
@@ -688,7 +688,7 @@ function DemoHub(){
       {/* Hero */}
       <section style={{
         minHeight:480,display:'flex',alignItems:'center',
-        background:`linear-gradient(135deg,${config.brandPrimary}f0 0%,${config.brandPrimary}bb 100%),url(${config.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'}) center/cover no-repeat`,
+        background:`linear-gradient(to right, ${config.brandPrimary}e0 0%, ${config.brandPrimary}99 60%, ${config.brandPrimary}44 100%), url(${config.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'}) center/cover no-repeat`,
         position:'relative',overflow:'hidden',
       }}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'80px 32px',width:'100%'}}>
