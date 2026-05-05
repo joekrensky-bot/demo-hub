@@ -115,6 +115,7 @@ exports.handler = async (event) => {
   };
 
   // Run og scrape + 2 SERP searches all in parallel
+  log('og+SERP start');
   const [_, articleResults, newsResults] = await Promise.all([
     ogPromise,
     serpSearch('site:' + domain + ' (blog OR article OR insight OR guide OR resource)'),
@@ -123,7 +124,7 @@ exports.handler = async (event) => {
 
   serpArticles = articleResults.slice(0,6);
   serpNews = newsResults.slice(0,6);
-  console.log('Mode:', mode, '| SERP articles:', serpArticles.length, '| news:', serpNews.length, '| ogTitle:', ogTitle.slice(0,30));
+  log('og+SERP done | articles=' + serpArticles.length + ' news=' + serpNews.length + ' ogImage=' + (ogImage?'yes':'no'));
 
   // ── DEEP MODE: scrape actual pages for real images ────────────
   let siteImages = [];
@@ -169,6 +170,8 @@ exports.handler = async (event) => {
   ].filter(Boolean).join('\n');
 
   try {
+    log('GPT start');
+    log('GPT start');
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
@@ -189,6 +192,8 @@ exports.handler = async (event) => {
     }
 
     const brand = JSON.parse((await gptRes.json()).choices[0].message.content);
+    log('GPT done brand=' + (brand.companyName||'?'));
+    log('GPT done');
     if(ogImage) brand.heroImageUrl = ogImage;
 
     const companyName = String(brand.companyName || domain);
@@ -220,6 +225,7 @@ exports.handler = async (event) => {
       };
     };
 
+    log('DONE — sending response');
     return {
       statusCode:200, headers,
       body: JSON.stringify({
