@@ -176,8 +176,12 @@ function App(){
             id:item.sys.id,
             title:f.title||f.name||f.headline||'Untitled',
             slug:f.slug||f.pageSlug||item.sys.id,
-            summary:f.summary||f.description||f.subtitle||f.excerpt||f.metaDescription||'',
             body:f.body||f.content||f.pageContent||f.copy||'',
+            summary:(()=>{
+              const raw=f.summary||f.description||f.subtitle||f.excerpt||f.metaDescription||f.body||f.content||f.pageContent||f.copy||'';
+              const stripped=raw.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+              return stripped.length>160?stripped.slice(0,157)+'…':stripped;
+            })(),
             imageUrl,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
             category:f.category||f.contentType||f.type||'Latest',
             readTime:'5 min read',date:item.sys.createdAt,
@@ -684,7 +688,7 @@ function DemoHub(){
       {/* Hero */}
       <section style={{
         minHeight:480,display:'flex',alignItems:'center',
-        background:`linear-gradient(135deg,${config.brandPrimary}f0 0%,${config.brandPrimary}bb 100%),url(${config.heroImageUrl||'https://picsum.photos/seed/hero/1600/900'}) center/cover no-repeat`,
+        background:`linear-gradient(135deg,${config.brandPrimary}f0 0%,${config.brandPrimary}bb 100%),url(${config.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'}) center/cover no-repeat`,
         position:'relative',overflow:'hidden',
       }}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'80px 32px',width:'100%'}}>
