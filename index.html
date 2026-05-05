@@ -631,6 +631,25 @@ function SetupPage(){
 }
 
 
+/* ─── THEME TOGGLE ─── */
+function ThemeToggle({value, onChange}){
+  const {THEMES}=useHub();
+  return(
+    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:4}}>
+      {Object.values(THEMES).map(t=>(
+        <button key={t.id} onClick={()=>onChange(t.id)}
+          style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'8px 4px',
+            border:value===t.id?'2px solid #6366f1':'1.5px solid #e2e8f0',
+            borderRadius:10,background:value===t.id?'#eef2ff':'white',
+            cursor:'pointer',transition:'all 0.15s',fontFamily:'DM Sans,sans-serif'}}>
+          <span style={{fontSize:18}}>{t.emoji}</span>
+          <span style={{fontSize:10,fontWeight:value===t.id?600:400,color:value===t.id?'#6366f1':'#374151',lineHeight:1.2,textAlign:'center'}}>{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ─── VALIDATE PAGE ─── */
 function ValidatePage(){
   const {config,updateConfig,THEMES,detectTheme}=useHub();
