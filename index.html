@@ -688,19 +688,19 @@ function HubLayout({children}){
   return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column'}}>
       {/* Nav */}
-      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const navBg=ts.navBg;const navText=ts.navTextColor;const isMonospace=ts.heroFont==='monospace';return(
-      <nav style={{background:navBg,position:'sticky',top:0,zIndex:100,boxShadow:ts.navShadow,borderBottom:ts.navBorderBottom!=='none'?ts.navBorderBottom:'none'}}>
+      <nav style={{background:getThemeStyles(config.theme||'generic',config).navBg,position:'sticky',top:0,zIndex:100,boxShadow:getThemeStyles(config.theme||'generic',config).navShadow,borderBottom:getThemeStyles(config.theme||'generic',config).navBorderBottom!=='none'?getThemeStyles(config.theme||'generic',config).navBorderBottom:'none'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px',height:64,display:'flex',alignItems:'center',gap:32}}>
           <a href="#/demo" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
-            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:navText==='#ffffff'||navText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
-            <span style={{fontSize:17,fontWeight:700,color:navText,letterSpacing:isMonospace?'0.05em':'-0.2px',fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}>{config.companyName}</span>
+            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:getThemeStyles(config.theme||'generic',config).navTextColor==='#ffffff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
+            <span style={{fontSize:17,fontWeight:700,color:getThemeStyles(config.theme||'generic',config).navTextColor,letterSpacing:'-0.2px'}}>{config.companyName}</span>
           </a>
           <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
             {navLinks.map(({label,path})=>{
               const active=path==='/demo'?currentPath==='/demo':currentPath.startsWith(path);
+              const ts=getThemeStyles(config.theme||'generic',config);
               return(
                 <a key={path} href={`#${path}`}
-                  style={{display:'flex',alignItems:'center',gap:4,fontSize:14,fontWeight:500,padding:'7px 14px',borderRadius:ts.navRadius,color:active?navText:`${navText}bb`,background:active?'rgba(128,128,128,0.15)':'transparent',transition:'background 0.15s',textDecoration:'none',position:'relative',fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}
+                  style={{display:'flex',alignItems:'center',gap:4,fontSize:14,fontWeight:500,padding:'7px 14px',borderRadius:ts.navRadius,color:active?ts.navTextColor:`${ts.navTextColor}bb`,background:active?'rgba(128,128,128,0.15)':'transparent',transition:'background 0.15s',textDecoration:'none',position:'relative'}}
                   onMouseOver={e=>e.currentTarget.style.background='rgba(128,128,128,0.12)'}
                   onMouseOut={e=>e.currentTarget.style.background=active?'rgba(128,128,128,0.15)':'transparent'}>
                   {label}
@@ -711,12 +711,8 @@ function HubLayout({children}){
           </div>
         </div>
       </nav>
-      );})()}
 
-      {/* Main */}
-      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);return(
-      <main style={{flex:1,background:ts.brandBg,color:ts.brandText}}>{children}</main>
-      );})()}
+      <main style={{flex:1,background:getThemeStyles(config.theme||'generic',config).brandBg,color:getThemeStyles(config.theme||'generic',config).brandText}}>{children}</main>
 
       {/* Footer */}
       <footer style={{background:config.brandPrimary}}>
@@ -827,6 +823,66 @@ function RefreshBtn(){
 
 
 /* ─── DEMO HOME ─── */
+function HeroSection({config}){
+  const ts=getThemeStyles(config.theme||'generic',config);
+  const isMonospace=ts.heroFont==='monospace';
+  return(
+    <section style={{minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
+      background:config.heroImageUrl
+        ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
+        :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
+      position:'relative',overflow:'hidden'}}>
+      <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
+        <div style={{maxWidth:600}}>
+          <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
+            ⚡ Resource Hub
+          </div>
+          <h1 style={{fontFamily:ts.heroFont,fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:isMonospace?'0.02em':'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
+          <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent,fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}>
+              {isMonospace?'EXPLORE ARTICLES →':'Explore Articles →'}
+            </a>
+            <a href="#/demo/news" style={{display:'inline-flex',alignItems:'center',color:'rgba(255,255,255,0.9)',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',border:'1.5px solid rgba(255,255,255,0.35)'}}>
+              {isMonospace?'LATEST NEWS':'Latest News'}
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+){
+  const ts=getThemeStyles(config.theme||'generic',config);
+  const isMonospace=ts.heroFont==='monospace';
+  return(
+    <section style={{minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
+      background:config.heroImageUrl
+        ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
+        :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
+      position:'relative',overflow:'hidden'}}>
+      <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
+        <div style={{maxWidth:600}}>
+          <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
+            ⚡ Resource Hub
+          </div>
+          <h1 style={{fontFamily:ts.heroFont,fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:isMonospace?'0.02em':'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
+          <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent}}>
+              {isMonospace?'EXPLORE ARTICLES →':'Explore Articles →'}
+            </a>
+            <a href="#/demo/news" style={{display:'inline-flex',alignItems:'center',color:'rgba(255,255,255,0.9)',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',border:'1.5px solid rgba(255,255,255,0.35)'}}>
+              {isMonospace?'LATEST NEWS':'Latest News'}
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DemoHub(){
   const {config,contentfulItems}=useHub();
   const [countdown,setCountdown]=useState(30);
@@ -845,32 +901,7 @@ function DemoHub(){
   return(
     <HubLayout>
       {/* Hero */}
-      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const isMonospace=ts.heroFont==='monospace';return(
-      <section style={{
-        minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
-        background:config.heroImageUrl
-          ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
-          :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
-        position:'relative',overflow:'hidden',
-      }}>
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
-          <div style={{maxWidth:600}}>
-            <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
-              ⚡ Resource Hub
-            </div>
-            <h1 style={{fontFamily:ts.heroFont,fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:isMonospace?'0.02em':'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
-            <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
-            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-              <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:12,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent}}>
-                Explore Articles →
-              </a>
-              <a href="#/demo/news" style={{display:'inline-flex',alignItems:'center',color:'rgba(255,255,255,0.9)',padding:'13px 24px',borderRadius:12,fontSize:15,fontWeight:600,textDecoration:'none',border:'1.5px solid rgba(255,255,255,0.35)'}}>
-                Latest News
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
+      <HeroSection config={config}/>
 
 
 
