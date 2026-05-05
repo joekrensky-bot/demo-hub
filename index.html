@@ -159,7 +159,7 @@ function App(){
     if(!config.generated)return;
     if(manual)setRefreshing(true);
     try{
-      const res=await fetch(`https://cdn.contentful.com/spaces/${config.spaceId}/entries?access_token=${config.deliveryKey}&content_type=blogPost&order=-sys.createdAt&limit=10`);
+      const res=await fetch(`https://cdn.contentful.com/spaces/${config.spaceId}/entries?access_token=${config.deliveryKey}&content_type=landingPage&order=-sys.createdAt&limit=10`);
       if(!res.ok)return;
       const data=await res.json();
       const fifteenMinsAgo=new Date(Date.now()-15*60*1000);
@@ -173,10 +173,14 @@ function App(){
             if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
           }
           return{
-            id:item.sys.id,title:f.title||'Untitled',slug:f.slug||item.sys.id,
-            summary:f.summary||f.description||'',body:f.body||f.content||'',
+            id:item.sys.id,
+            title:f.title||f.name||f.headline||'Untitled',
+            slug:f.slug||f.pageSlug||item.sys.id,
+            summary:f.summary||f.description||f.subtitle||f.excerpt||f.metaDescription||'',
+            body:f.body||f.content||f.pageContent||f.copy||'',
             imageUrl,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
-            category:f.category||'Latest',readTime:'5 min read',date:item.sys.createdAt,
+            category:f.category||f.contentType||f.type||'Latest',
+            readTime:'5 min read',date:item.sys.createdAt,
           };
         });
       setContentfulItems(items);
