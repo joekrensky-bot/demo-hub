@@ -391,13 +391,26 @@ function SetupPage(){
   const [showManual,setShowManual]=useState(false);
   const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
 
-  const steps=['Crawling site with Firecrawl…','Extracting real articles…','Analyzing brand identity…','Structuring content…','Building your hub…','Almost there…'];
+  const steps=[
+  '🐱 Wrangling kitties…',
+  '☕ Grab a coffee, this takes ~15s…',
+  '🔍 Scouring the internet for real content…',
+  '🎨 Extracting brand vibes…',
+  '✍️ Ghost-writing 6 articles…',
+  '📰 Rounding up the news…',
+  '🧠 Teaching GPT about your prospect…',
+  '🖼️ Hunting for good images…',
+  '💅 Making it look pretty…',
+  '🚀 Almost ready, hang tight…',
+  '🐌 Still going, promise it's worth it…',
+  '✨ Putting on the finishing touches…',
+];
 
   const handleAnalyze=async()=>{
     if(!url.trim()){setError('Please enter a prospect URL');return;}
     setError('');setLoading(true);
     let i=0;setLoadingMsg(steps[0]);
-    const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},2200);
+    const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},1500);
     try{
       const brand=await scrapeBrand(url.trim());
       clearInterval(iv);
@@ -407,9 +420,20 @@ function SetupPage(){
       updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme,generated:false});
       navigate('/validate');
     }catch(e){
-      clearInterval(iv);
-      setError('Error: ' + (e.message||String(e)));
-      setLoading(false);
+      // Auto-retry once
+      try{
+        setLoadingMsg('🔄 First attempt timed out — trying again…');
+        const brand2=await scrapeBrand(url.trim());
+        clearInterval(iv);
+        const autoTheme2=detectTheme(brand2.companyName, brand2.aboutText);
+        localStorage.clear();
+        updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand2,theme:autoTheme2,generated:false});
+        navigate('/validate');
+      }catch(e2){
+        clearInterval(iv);
+        setError('😅 Still failing: ' + (e2.message||String(e2)) + ' — try manual setup or a different URL');
+        setLoading(false);
+      }
     }
   };
 

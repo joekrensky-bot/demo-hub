@@ -92,38 +92,38 @@ exports.handler = async (event) => {
     if(md) ogDesc = md[1].trim();
   }).catch(()=>{});
 
-  // Firecrawl search — returns SERP results with title, description, url
-  // No page scraping needed — just the search snippet data
+  // Firecrawl search — SERP snippets only, no scraping
   const serpSearch = async (query) => {
     if(!FIRECRAWL_KEY) return [];
     try {
       const r = await fetch('https://api.firecrawl.dev/v1/search', {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+FIRECRAWL_KEY},
-        body: JSON.stringify({ query, limit: 6, scrapeOptions: { formats: [] } }),
-        signal: AbortSignal.timeout(4000),
+        body: JSON.stringify({ query, limit: 8 }),
+        signal: AbortSignal.timeout(5000),
       });
-      if(!r.ok) return [];
+      if(!r.ok){ console.log('SERP fail:',r.status,await r.text()); return []; }
       const d = await r.json();
+      // Accept any result from this domain OR closely related
       return (d.data||[]).map(item => ({
-        title: item.title || '',
-        summary: item.description || '',
+        title: String(item.title||'').replace(/\s*[-|].*$/,'').trim(), // strip site name suffix
+        summary: item.description || item.markdown?.slice(0,200) || '',
         url: item.url || '',
-        date: item.publishedDate || '2025-05-04',
-      })).filter(item => item.title && item.url.includes(domain));
-    } catch(e) { return []; }
+        date: item.publishedDate || item.metadata?.publishedDate || '2025-05-04',
+      })).filter(item => item.title.length > 5);
+    } catch(e){ console.log('SERP error:',e.message); return []; }
   };
 
-  // Run everything in parallel
+  // Run og scrape + 2 SERP searches all in parallel
   const [_, articleResults, newsResults] = await Promise.all([
     ogPromise,
-    serpSearch('site:' + domain + ' blog OR article OR insight'),
-    serpSearch('site:' + domain + ' news OR press OR announcement'),
+    serpSearch('site:' + domain + ' (blog OR article OR insight OR guide OR resource)'),
+    serpSearch(domain + ' news announcement 2025'),
   ]);
 
   serpArticles = articleResults;
   serpNews = newsResults;
-  console.log('SERP articles:', serpArticles.length, '| news:', serpNews.length);
+  console.log('SERP articles:', serpArticles.length, '| news:', serpNews.length, '| ogTitle:', ogTitle.slice(0,40));
 
   // ── STEP 2: GPT structures brand + fills gaps ─────────────────
   const s = v => v == null ? '' : String(v);
@@ -175,11 +175,13 @@ exports.handler = async (event) => {
     if(articles.length < 6) articles = [...articles, ...makePlaceholders(companyName, 6-articles.length, 'article')];
     if(news.length < 6) news = [...news, ...makePlaceholders(companyName, 6-news.length, 'news')];
 
+    // Rotate through different fallback images so they're not all identical
+    const fallbackPool = Object.values(FALLBACK_IMAGES).filter((_,i) => i < Object.values(FALLBACK_IMAGES).length-1);
     const buildItem = (a, i, type) => ({
       id: type+'-'+i,
       title: String(a.title || type+' '+(i+1)),
       summary: String(a.summary || ''),
-      imageUrl: getFallback(a.category, a.title),
+      imageUrl: fallbackPool[i % fallbackPool.length] || getFallback(a.category, a.title),
       imageSource: 'fallback',
       slug: String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||type+'-'+i),
       category: String(a.category||(type==='news'?'News':'Insights')),
