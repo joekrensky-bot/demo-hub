@@ -50,7 +50,7 @@ const DEFAULT_CONFIG = {
   heroSubheading:'Stay ahead with the latest thinking from our team.',
   heroImageUrl:'',
   fallbackImageUrl:'https://picsum.photos/seed/fallback/800/450',heroImageUrl:'https://picsum.photos/seed/hero/1600/900',
-  articles:[],news:[],aboutText:'',products:[],generated:false,
+  articles:[],news:[],aboutText:'',products:[],generated:false,theme:'generic',
 };
 
 /* ─── CONTEXT ─── */
@@ -79,7 +79,141 @@ function fmtDateLong(d){
   if(!d)return'';
   try{return new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});}catch{return d;}
 }
+/* ─── THEMES ─── */
+const THEMES = {
+  generic: {
+    id:'generic', label:'Generic', emoji:'🌐',
+    description:'Warm · rounded · serif headlines',
+    overrides: {
+      brandBg:'#f9f7f4',
+      cardBg:'#ffffff', cardBorder:'#e2e8f0',
+      cardRadius:'14px', navRadius:'8px', btnRadius:'10px', badgeRadius:'20px',
+      heroFont:'DM Serif Display,serif', headingFont:'DM Serif Display,serif',
+      categoryStyle:'pill', sectionBg:'#f0ede8',
+      navShadow:'0 2px 16px rgba(0,0,0,0.15)',
+    }
+  },
+  b2btech: {
+    id:'b2btech', label:'B2B Tech', emoji:'⚙',
+    description:'Dark · monospace · sharp corners · cyan',
+    overrides: {
+      brandBg:'#080d14', brandText:'#e2e8f0',
+      cardBg:'#0a0f1a', cardBorder:'#1e3a5f',
+      cardRadius:'4px', navRadius:'2px', btnRadius:'2px', badgeRadius:'2px',
+      heroFont:'monospace', headingFont:'monospace',
+      categoryStyle:'tag', sectionBg:'#0a0f1a',
+      navShadow:'none', navBorderBottom:'1px solid #1e3a5f',
+      forceDark:true,
+    }
+  },
+  health: {
+    id:'health', label:'Health Sciences', emoji:'🏥',
+    description:'White nav · medical green · clean · trusted',
+    overrides: {
+      brandBg:'#f0f7f4',
+      cardBg:'#ffffff', cardBorder:'#d1e9df',
+      cardRadius:'12px', navRadius:'8px', btnRadius:'24px', badgeRadius:'24px',
+      heroFont:'DM Sans,sans-serif', headingFont:'DM Sans,sans-serif',
+      categoryStyle:'pill', sectionBg:'#e8f5ef',
+      navBg:'#ffffff', navTextColor:'#0f172a',
+      navShadow:'0 1px 8px rgba(0,0,0,0.06)',
+    }
+  },
+  finserv: {
+    id:'finserv', label:'Finserv', emoji:'🏦',
+    description:'Navy/gold · serif · square corners · formal',
+    overrides: {
+      brandBg:'#fafaf8',
+      cardBg:'#ffffff', cardBorder:'#e8e0d0',
+      cardRadius:'0px', navRadius:'0px', btnRadius:'0px', badgeRadius:'0px',
+      heroFont:'Georgia,serif', headingFont:'Georgia,serif',
+      categoryStyle:'label', sectionBg:'#f5f0e8',
+      navShadow:'none', navBorderBottom:'2px solid',
+    }
+  },
+  ecommerce: {
+    id:'ecommerce', label:'Ecommerce', emoji:'🛍',
+    description:'Energetic · pill badges · warm · playful',
+    overrides: {
+      brandBg:'#fff5f7',
+      cardBg:'#ffffff', cardBorder:'#fce7ec',
+      cardRadius:'16px', navRadius:'24px', btnRadius:'24px', badgeRadius:'24px',
+      heroFont:'DM Sans,sans-serif', headingFont:'DM Sans,sans-serif',
+      categoryStyle:'pill', sectionBg:'#fff0f4',
+      navBg:'#ffffff', navTextColor:'#0f172a',
+      navShadow:'0 1px 8px rgba(0,0,0,0.08)',
+    }
+  },
+};
+
+// Detect theme from industry hint
+function detectTheme(companyName, aboutText) {
+  const text = ((companyName||'') + ' ' + (aboutText||'')).toLowerCase();
+  if(/health|medical|clinic|pharma|biotech|hospital|care|patient|drug|therapy|science/i.test(text)) return 'health';
+  if(/bank|financ|invest|capital|fund|asset|wealth|insurance|payment|fintech|trading|credit/i.test(text)) return 'finserv';
+  if(/shop|retail|commerce|store|fashion|brand|consumer|beauty|apparel|marketplace/i.test(text)) return 'ecommerce';
+  if(/software|cloud|api|platform|data|enterprise|developer|saas|devops|cyber|security|network|tech/i.test(text)) return 'b2btech';
+  return 'generic';
+}
+
+function getThemeStyles(themeId, config) {
+  const t = THEMES[themeId] || THEMES.generic;
+  const o = t.overrides;
+  return {
+    brandBg: o.forceDark ? o.brandBg : (o.brandBg || config.brandBg || '#f9f7f4'),
+    brandText: o.forceDark ? o.brandText : (config.brandText || '#1a1a2e'),
+    cardBg: o.cardBg || '#ffffff',
+    cardBorder: o.cardBorder || '#e2e8f0',
+    cardRadius: o.cardRadius || '14px',
+    navRadius: o.navRadius || '8px',
+    btnRadius: o.btnRadius || '10px',
+    badgeRadius: o.badgeRadius || '20px',
+    heroFont: o.heroFont || 'DM Serif Display,serif',
+    headingFont: o.headingFont || 'DM Serif Display,serif',
+    categoryStyle: o.categoryStyle || 'pill',
+    sectionBg: o.sectionBg || '#f0ede8',
+    navBg: o.navBg || config.brandPrimary,
+    navTextColor: o.navTextColor || config.brandHeaderText,
+    navShadow: o.navShadow !== undefined ? o.navShadow : '0 2px 16px rgba(0,0,0,0.15)',
+    navBorderBottom: o.navBorderBottom || 'none',
+    forceDark: o.forceDark || false,
+  };
+}
+
 function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
+
+/* ─── THEMES ─── */
+const THEMES = {
+  generic: {id:'generic',label:'Generic',emoji:'🌐',description:'Warm · rounded · serif headlines',overrides:{brandBg:'#f9f7f4',cardBg:'#ffffff',cardBorder:'#e2e8f0',cardRadius:'14px',navRadius:'8px',btnRadius:'10px',badgeRadius:'20px',heroFont:'DM Serif Display,serif',headingFont:'DM Serif Display,serif',categoryStyle:'pill',sectionBg:'#f0ede8',navShadow:'0 2px 16px rgba(0,0,0,0.15)'}},
+  b2btech: {id:'b2btech',label:'B2B Tech',emoji:'⚙',description:'Dark · monospace · sharp corners · cyan',overrides:{brandBg:'#080d14',brandText:'#e2e8f0',cardBg:'#0a0f1a',cardBorder:'#1e3a5f',cardRadius:'4px',navRadius:'2px',btnRadius:'2px',badgeRadius:'2px',heroFont:'monospace',headingFont:'monospace',categoryStyle:'tag',sectionBg:'#0a0f1a',navShadow:'none',navBorderBottom:'1px solid #1e3a5f',forceDark:true}},
+  health: {id:'health',label:'Health Sciences',emoji:'🏥',description:'White nav · medical green · clean · trusted',overrides:{brandBg:'#f0f7f4',cardBg:'#ffffff',cardBorder:'#d1e9df',cardRadius:'12px',navRadius:'8px',btnRadius:'24px',badgeRadius:'24px',heroFont:'DM Sans,sans-serif',headingFont:'DM Sans,sans-serif',categoryStyle:'pill',sectionBg:'#e8f5ef',navBg:'#ffffff',navTextColor:'#0f172a',navShadow:'0 1px 8px rgba(0,0,0,0.06)'}},
+  finserv: {id:'finserv',label:'Finserv',emoji:'🏦',description:'Navy/gold · serif · square corners · formal',overrides:{brandBg:'#fafaf8',cardBg:'#ffffff',cardBorder:'#e8e0d0',cardRadius:'0px',navRadius:'0px',btnRadius:'0px',badgeRadius:'0px',heroFont:'Georgia,serif',headingFont:'Georgia,serif',categoryStyle:'label',sectionBg:'#f5f0e8',navShadow:'none',navBorderBottom:'2px solid'}},
+  ecommerce: {id:'ecommerce',label:'Ecommerce',emoji:'🛍',description:'Energetic · pill badges · warm · playful',overrides:{brandBg:'#fff5f7',cardBg:'#ffffff',cardBorder:'#fce7ec',cardRadius:'16px',navRadius:'24px',btnRadius:'24px',badgeRadius:'24px',heroFont:'DM Sans,sans-serif',headingFont:'DM Sans,sans-serif',categoryStyle:'pill',sectionBg:'#fff0f4',navBg:'#ffffff',navTextColor:'#0f172a',navShadow:'0 1px 8px rgba(0,0,0,0.08)'}},
+};
+function detectTheme(companyName,aboutText){
+  const text=((companyName||'')+' '+(aboutText||'')).toLowerCase();
+  if(/health|medical|clinic|pharma|biotech|hospital|care|patient|drug|therapy/i.test(text))return 'health';
+  if(/bank|financ|invest|capital|fund|asset|wealth|insurance|payment|fintech|trading/i.test(text))return 'finserv';
+  if(/shop|retail|commerce|store|fashion|brand|consumer|beauty|apparel|marketplace/i.test(text))return 'ecommerce';
+  if(/software|cloud|api|platform|data|enterprise|developer|saas|devops|cyber|security|network/i.test(text))return 'b2btech';
+  return 'generic';
+}
+function getThemeStyles(themeId,config){
+  const t=THEMES[themeId]||THEMES.generic;
+  const o=t.overrides;
+  return{
+    brandBg:o.forceDark?o.brandBg:(o.brandBg||config.brandBg||'#f9f7f4'),
+    brandText:o.forceDark?o.brandText:(config.brandText||'#1a1a2e'),
+    cardBg:o.cardBg||'#ffffff',cardBorder:o.cardBorder||'#e2e8f0',
+    cardRadius:o.cardRadius||'14px',navRadius:o.navRadius||'8px',
+    btnRadius:o.btnRadius||'10px',badgeRadius:o.badgeRadius||'20px',
+    heroFont:o.heroFont||'DM Serif Display,serif',headingFont:o.headingFont||'DM Serif Display,serif',
+    categoryStyle:o.categoryStyle||'pill',sectionBg:o.sectionBg||'#f0ede8',
+    navBg:o.navBg||config.brandPrimary,navTextColor:o.navTextColor||config.brandHeaderText,
+    navShadow:o.navShadow!==undefined?o.navShadow:'0 2px 16px rgba(0,0,0,0.15)',
+    navBorderBottom:o.navBorderBottom||'none',forceDark:o.forceDark||false,
+  };
+}
 
 async function scrapeBrand(url, manual=false){
   const clean=url?(url.startsWith('http')?url:'https://'+url):'';
@@ -181,7 +315,7 @@ function App(){
     if(needsSetup&&!isSetupRoute)navigate('/setup');
   },[needsSetup,isSetupRoute]);
 
-  const ctx={config,updateConfig,contentfulItems,DEFAULT_CONFIG,pollContentful,refreshing,lastRefresh};
+  const ctx={config,updateConfig,contentfulItems,DEFAULT_CONFIG,pollContentful,refreshing,lastRefresh,THEMES,detectTheme,getThemeStyles};
 
   return(
     <HubCtx.Provider value={ctx}>
@@ -220,7 +354,8 @@ function SetupPage(){
     try{
       const brand=await scrapeBrand(url.trim());
       clearInterval(iv);
-      updateConfig({prospectUrl:url.trim(),spaceId,deliveryKey,...brand});
+      const autoTheme=detectTheme(brand.companyName, brand.aboutText);
+      updateConfig({prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme});
       navigate('/validate');
     }catch(e){
       clearInterval(iv);
@@ -343,9 +478,30 @@ function SetupPage(){
   );
 }
 
+/* ─── THEME TOGGLE ─── */
+function ThemeToggle({value, onChange}){
+  const {THEMES}=useHub();
+  return(
+    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:4}}>
+      {Object.values(THEMES).map(t=>(
+        <button key={t.id} onClick={()=>onChange(t.id)}
+          style={{
+            display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+            padding:'8px 4px',border:value===t.id?'2px solid #6366f1':'1.5px solid #e2e8f0',
+            borderRadius:10,background:value===t.id?'#eef2ff':'white',
+            cursor:'pointer',transition:'all 0.15s',fontFamily:'DM Sans,sans-serif',
+          }}>
+          <span style={{fontSize:18}}>{t.emoji}</span>
+          <span style={{fontSize:10,fontWeight:value===t.id?600:400,color:value===t.id?'#6366f1':'#374151',lineHeight:1.2,textAlign:'center'}}>{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ─── VALIDATE PAGE ─── */
 function ValidatePage(){
-  const {config,updateConfig}=useHub();
+  const {config,updateConfig,THEMES,detectTheme}=useHub();
   const [local,setLocal]=useState({...config});
   const [tab,setTab]=useState('brand');
   const set=key=>val=>setLocal(p=>({...p,[key]:val}));
@@ -378,6 +534,10 @@ function ValidatePage(){
         {/* Scroll area */}
         <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
           {tab==='brand'&&<>
+            <Section title="Design Theme">
+              <ThemeToggle value={local.theme||'generic'} onChange={v=>setLocal(p=>({...p,theme:v}))}/>
+              <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{THEMES[local.theme||'generic']?.description}</div>
+            </Section>
             <Section title="Colors">
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 {[['Header / Nav','brandPrimary'],['Header text','brandHeaderText'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
@@ -490,33 +650,55 @@ function ContentItemEditor({item,num,onChange,titleOnly}){
   );
 }
 function MiniPreview({config:c}){
+  const ts=getThemeStyles(c.theme||'generic',c);
+  const cardR=ts.cardRadius;
+  const btnR=ts.btnRadius;
+  const badgeR=ts.badgeRadius;
+  const isMonospace=ts.heroFont==='monospace';
+  const navBg=ts.navBg;
+  const navText=ts.navTextColor;
   return(
     <div style={{width:'100%',maxWidth:680,borderRadius:16,overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,0.12)',border:'1px solid #e2e8f0'}}>
-      <div style={{background:c.brandPrimary,padding:'12px 20px',display:'flex',alignItems:'center',gap:12}}>
-        {c.logoUrl&&<img src={c.logoUrl} alt="" style={{height:22,objectFit:'contain',filter:c.brandHeaderText==='#ffffff'||c.brandHeaderText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>e.target.style.display='none'}/>}
-        <span style={{fontSize:15,fontWeight:700,color:c.brandHeaderText,flex:1}}>{c.companyName||'Content Hub'}</span>
+      {/* Nav */}
+      <div style={{background:navBg,padding:'12px 20px',display:'flex',alignItems:'center',gap:12,borderBottom:ts.navBorderBottom!=='none'?ts.navBorderBottom:'none',boxShadow:ts.navShadow}}>
+        {c.logoUrl&&<img src={c.logoUrl} alt="" style={{height:22,objectFit:'contain',filter:navText==='#ffffff'||navText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>e.target.style.display='none'}/>}
+        <span style={{fontSize:15,fontWeight:700,color:navText,flex:1,fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}>{c.companyName||'Content Hub'}</span>
         <div style={{display:'flex',gap:12}}>
-          {['Home','Products','Articles','News','About'].map(n=><span key={n} style={{fontSize:11,color:c.brandHeaderText,opacity:0.75}}>{n}</span>)}
+          {['Home','Articles','News'].map(n=><span key={n} style={{fontSize:11,color:navText,opacity:0.75,fontFamily:isMonospace?'monospace':'inherit'}}>{n}</span>)}
         </div>
       </div>
-      <div style={{background:`linear-gradient(rgba(0,0,0,0.4),rgba(0,0,0,0.4)),url(${c.heroImageUrl||'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=60'}) center/cover`,padding:'28px 24px'}}>
-        <div style={{fontFamily:'DM Serif Display,serif',fontSize:22,color:'white',marginBottom:6}}>{c.heroHeadline||'Insights & Resources'}</div>
-        <div style={{fontSize:13,color:'rgba(255,255,255,0.75)',marginBottom:14}}>{c.heroSubheading}</div>
-        <div style={{background:c.brandAccent,display:'inline-block',padding:'7px 16px',borderRadius:8,fontSize:13,fontWeight:600,color:'white'}}>Explore →</div>
+      {/* Hero */}
+      <div style={{background:c.heroImageUrl
+        ?`linear-gradient(rgba(0,0,0,0.5),rgba(0,0,0,0.35)),url(${c.heroImageUrl}) center/cover`
+        :`linear-gradient(135deg,${c.brandPrimary},${c.brandPrimary}cc)`,
+        padding:'32px 24px 28px'}}>
+        <div style={{fontFamily:ts.heroFont,fontSize:22,color:'white',marginBottom:6,letterSpacing:isMonospace?'-0.03em':'-0.02em',textShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>{c.heroHeadline||'Insights & Resources'}</div>
+        <div style={{fontSize:13,color:'rgba(255,255,255,0.82)',marginBottom:16,fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}>{c.heroSubheading||'Stay ahead with the latest thinking.'}</div>
+        <div style={{background:c.brandAccent,display:'inline-block',padding:'7px 18px',borderRadius:btnR,fontSize:13,fontWeight:600,color:'white',fontFamily:isMonospace?'monospace':'inherit'}}>
+          {isMonospace?'EXPLORE →':'Explore →'}
+        </div>
       </div>
-      <div style={{padding:'16px 20px',background:c.brandBg||'#fff'}}>
-        <div style={{fontSize:13,fontWeight:600,color:c.brandText,marginBottom:10}}>Latest Articles</div>
+      {/* Cards */}
+      <div style={{padding:'16px 20px',background:ts.brandBg}}>
+        <div style={{fontSize:13,fontWeight:600,color:ts.brandText,marginBottom:10,fontFamily:ts.headingFont}}>{isMonospace?'// LATEST ARTICLES':'Latest Articles'}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-          <div style={{border:`1.5px solid ${c.brandAccent}`,borderRadius:8,padding:8,background:c.brandAccent+'15'}}>
-            <span style={{fontSize:9,background:c.brandAccent,color:'white',padding:'2px 6px',borderRadius:3,display:'inline-block',marginBottom:6}}>✦ New</span>
-            <div style={{height:28,background:'#e2e8f0',borderRadius:3}}></div>
+          <div style={{border:`1.5px solid ${c.brandAccent}`,borderRadius:cardR,padding:8,background:ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'}}>
+            <span style={{fontSize:9,background:c.brandAccent,color:'white',padding:'2px 8px',borderRadius:badgeR,display:'inline-block',marginBottom:6,fontFamily:isMonospace?'monospace':'inherit',fontWeight:700}}>
+              {isMonospace?'NEW':'✦ New'}
+            </span>
+            <div style={{height:28,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:parseInt(cardR)>0?4:0}}></div>
+            <div style={{fontSize:8,color:ts.brandText,marginTop:4,fontFamily:isMonospace?'monospace':'inherit',opacity:0.8}}>Latest article</div>
           </div>
-          {[1,2,3,4,5].map(i=><div key={i} style={{border:'1px solid #e2e8f0',borderRadius:8,padding:8,background:'white'}}><div style={{height:34,background:'#f1f5f9',borderRadius:3}}></div></div>)}
+          {[1,2,3,4,5].map(i=><div key={i} style={{border:`0.5px solid ${ts.cardBorder}`,borderRadius:cardR,padding:8,background:ts.cardBg}}>
+            <div style={{height:34,background:ts.forceDark?'#1e3a5f':'#f1f5f9',borderRadius:parseInt(cardR)>0?3:0,marginBottom:4}}></div>
+            <div style={{fontSize:8,color:ts.brandText,opacity:0.6,fontFamily:isMonospace?'monospace':'inherit'}}>Article {i+1}</div>
+          </div>)}
         </div>
       </div>
-      <div style={{background:c.brandPrimary,padding:'8px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span style={{fontSize:10,color:c.brandHeaderText,opacity:0.5}}>© {c.companyName}</span>
-        <span style={{fontSize:10,color:'#FF4F00',fontWeight:600}}>⚡ Powered by Jasper</span>
+      {/* Footer */}
+      <div style={{background:ts.forceDark?'#0a0f1a':c.brandPrimary,padding:'8px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:ts.forceDark?'1px solid #1e3a5f':'none'}}>
+        <span style={{fontSize:10,color:navText,opacity:0.5,fontFamily:isMonospace?'monospace':'inherit'}}>© {c.companyName}</span>
+        <span style={{fontSize:10,color:'#FF4F00',fontWeight:600,fontFamily:isMonospace?'monospace':'inherit'}}>⚡ {isMonospace?'JASPER':'Powered by Jasper'}</span>
       </div>
     </div>
   );
@@ -524,7 +706,7 @@ function MiniPreview({config:c}){
 
 /* ─── HUB LAYOUT ─── */
 function HubLayout({children}){
-  const {config,contentfulItems}=useHub();
+  const {config,contentfulItems,updateConfig,THEMES}=useHub();
   const [mobileOpen,setMobileOpen]=useState(false);
   const hasNew=contentfulItems.length>0;
 
@@ -538,20 +720,21 @@ function HubLayout({children}){
   return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column'}}>
       {/* Nav */}
-      <nav style={{background:config.brandPrimary,position:'sticky',top:0,zIndex:100,boxShadow:'0 2px 16px rgba(0,0,0,0.15)'}}>
+      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const navBg=ts.navBg;const navText=ts.navTextColor;const isMonospace=ts.heroFont==='monospace';return(
+      <nav style={{background:navBg,position:'sticky',top:0,zIndex:100,boxShadow:ts.navShadow,borderBottom:ts.navBorderBottom!=='none'?ts.navBorderBottom:'none'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px',height:64,display:'flex',alignItems:'center',gap:32}}>
           <a href="#/demo" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
-            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:config.brandHeaderText==='#ffffff'||config.brandHeaderText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
-            <span style={{fontSize:17,fontWeight:700,color:config.brandHeaderText,letterSpacing:'-0.2px'}}>{config.companyName}</span>
+            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:navText==='#ffffff'||navText==='#fff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
+            <span style={{fontSize:17,fontWeight:700,color:navText,letterSpacing:isMonospace?'0.05em':'-0.2px',fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}>{config.companyName}</span>
           </a>
           <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
             {navLinks.map(({label,path})=>{
               const active=path==='/demo'?currentPath==='/demo':currentPath.startsWith(path);
               return(
                 <a key={path} href={`#${path}`}
-                  style={{display:'flex',alignItems:'center',gap:4,fontSize:14,fontWeight:500,padding:'7px 14px',borderRadius:8,color:active?config.brandHeaderText:`${config.brandHeaderText}bb`,background:active?'rgba(255,255,255,0.15)':'transparent',transition:'background 0.15s',textDecoration:'none',position:'relative'}}
-                  onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.12)'}
-                  onMouseOut={e=>e.currentTarget.style.background=active?'rgba(255,255,255,0.15)':'transparent'}>
+                  style={{display:'flex',alignItems:'center',gap:4,fontSize:14,fontWeight:500,padding:'7px 14px',borderRadius:ts.navRadius,color:active?navText:`${navText}bb`,background:active?'rgba(128,128,128,0.15)':'transparent',transition:'background 0.15s',textDecoration:'none',position:'relative',fontFamily:isMonospace?'monospace':'DM Sans,sans-serif'}}
+                  onMouseOver={e=>e.currentTarget.style.background='rgba(128,128,128,0.12)'}
+                  onMouseOut={e=>e.currentTarget.style.background=active?'rgba(128,128,128,0.15)':'transparent'}>
                   {label}
                   {label==='Articles'&&hasNew&&<span style={{width:6,height:6,background:'#22c55e',borderRadius:'50%',display:'inline-block',animation:'pulse 2s ease-in-out infinite'}}></span>}
                 </a>
@@ -560,9 +743,12 @@ function HubLayout({children}){
           </div>
         </div>
       </nav>
+      );})()}
 
       {/* Main */}
-      <main style={{flex:1,background:config.brandBg,color:config.brandText}}>{children}</main>
+      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);return(
+      <main style={{flex:1,background:ts.brandBg,color:ts.brandText}}>{children}</main>
+      );})()}
 
       {/* Footer */}
       <footer style={{background:config.brandPrimary}}>
@@ -592,10 +778,21 @@ function HubLayout({children}){
       </footer>
 
       {/* Setup escape hatch */}
-      <button onClick={()=>navigate('/setup')} title="Back to hub builder"
-        style={{position:'fixed',bottom:20,right:20,width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#64748b',zIndex:200,fontSize:16}}>
-        ⚙
-      </button>
+      <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:6,zIndex:200}}>
+        {/* Theme switcher */}
+        <div style={{background:'white',border:'1px solid #e2e8f0',borderRadius:12,boxShadow:'0 2px 12px rgba(0,0,0,0.12)',overflow:'hidden'}}>
+          {Object.values(THEMES).map(t=>(
+            <button key={t.id} onClick={()=>updateConfig({theme:t.id})} title={t.label}
+              style={{display:'block',width:36,height:30,background:config.theme===t.id?'#eef2ff':'transparent',border:'none',borderBottom:'0.5px solid #f1f5f9',cursor:'pointer',fontSize:14,transition:'background 0.15s'}}>
+              {t.emoji}
+            </button>
+          ))}
+        </div>
+        <button onClick={()=>navigate('/setup')} title="Back to hub builder"
+          style={{width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#64748b',fontSize:16}}>
+          ⚙
+        </button>
+      </div>
     </div>
   );
 }
@@ -607,8 +804,9 @@ function ContentCard({item,basePath,featured=false,size='normal'}){
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
-      style={{display:'flex',flexDirection:featured?'row':'column',background:'white',borderRadius:14,overflow:'hidden',
-        border:item.isNew?`1.5px solid ${config.brandAccent}`:'1px solid #e2e8f0',
+      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const cardR=ts.cardRadius;const badgeR=ts.badgeRadius;return null;})()}
+    style={{display:'flex',flexDirection:featured?'row':'column',background:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return ts.cardBg;})(),borderRadius:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return ts.cardRadius;})(),overflow:'hidden',
+        border:item.isNew?`1.5px solid ${config.brandAccent}`:(()=>{const ts=getThemeStyles(config.theme||'generic',config);return `0.5px solid ${ts.cardBorder}`;})(),
         textDecoration:'none',color:'inherit',transition:'transform 0.2s, box-shadow 0.2s',position:'relative'}}
       onMouseOver={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 8px 32px rgba(0,0,0,0.1)';}}
       onMouseOut={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='none';}}>
@@ -680,11 +878,12 @@ function DemoHub(){
   return(
     <HubLayout>
       {/* Hero */}
+      {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const isMonospace=ts.heroFont==='monospace';return(
       <section style={{
         minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
         background:config.heroImageUrl
           ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
-          :`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
+          :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
         position:'relative',overflow:'hidden',
       }}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
@@ -692,7 +891,7 @@ function DemoHub(){
             <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
               ⚡ Resource Hub
             </div>
-            <h1 style={{fontFamily:'DM Serif Display,serif',fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
+            <h1 style={{fontFamily:ts.heroFont,fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:isMonospace?'0.02em':'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
             <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
               <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:12,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent}}>
@@ -742,13 +941,15 @@ function DemoHub(){
 }
 
 function SectionWrap({title,sub,link,linkLabel,config,children,tinted,refreshBtn}){
+  const ts=getThemeStyles(config.theme||'generic',config);
+  const isMonospace=ts.heroFont==='monospace';
   return(
-    <section style={{padding:'64px 0',background:tinted?'#f0ede8':'#f9f7f4'}}>
+    <section style={{padding:'64px 0',background:tinted?ts.sectionBg:ts.brandBg}}>
       <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px'}}>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:32,gap:16,flexWrap:'wrap'}}>
           <div>
-            <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:32,color:config.brandText||'#0f172a',marginBottom:4,letterSpacing:'-0.3px'}}>{title}</h2>
-            <p style={{fontSize:15,color:'#64748b'}}>{sub}</p>
+            <h2 style={{fontFamily:ts.headingFont,fontSize:32,color:ts.brandText,marginBottom:4,letterSpacing:isMonospace?'0.02em':'-0.3px'}}>{isMonospace?title.toUpperCase():title}</h2>
+            <p style={{fontSize:15,color:ts.forceDark?'#64748b':'#64748b'}}>{sub}</p>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:16}}>
             {refreshBtn}
