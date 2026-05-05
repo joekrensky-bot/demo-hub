@@ -163,12 +163,14 @@ exports.handler = async (event) => {
 
     // Assign images
     const mapManual = async (a, i, type) => {
-      const img = await getArticleImage([], i, a.category, companyName);
+      const img = await getArticleImage([], i, a.category, companyName, a.title);
       return {
         id: type + '-' + i,
         title: String(a.title || type + ' ' + (i+1)),
         summary: String(a.summary || ''),
-        imageUrl: img,
+        imageUrl: String(img||'').split('|')[0],
+        imageSource: String(img||'').includes('|source:') ? String(img).split('|source:')[1].split('|')[0] : 'fallback',
+        imageQuery: String(img||'').includes('|query:') ? String(img).split('|query:')[1] : '',
         slug: String(a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-') || type+'-'+i),
         category: String(a.category || (type==='news'?'News':'Insights')),
         readTime: String(a.readTime || '5 min read'),
@@ -301,12 +303,14 @@ exports.handler = async (event) => {
 
     // Map items with smart image selection
     const mapItem = async (a, i, type) => {
-      const img = await getArticleImage(siteImages, i, a.category, companyName);
+      const img = await getArticleImage(siteImages, i, a.category, companyName, a.title);
       return {
         id: type+'-'+i,
         title: String(a.title || type+' '+(i+1)),
         summary: String(a.summary || ''),
-        imageUrl: img,
+        imageUrl: String(img||'').split('|')[0],
+        imageSource: String(img||'').includes('|source:') ? String(img).split('|source:')[1].split('|')[0] : 'fallback',
+        imageQuery: String(img||'').includes('|query:') ? String(img).split('|query:')[1] : '',
         slug: String(a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || type+'-'+i),
         category: String(a.category || (type==='news'?'News':'Insights')),
         readTime: String(a.readTime || '5 min read'),

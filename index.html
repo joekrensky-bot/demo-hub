@@ -653,6 +653,8 @@ function TF({label,value,onChange,multiline,hint}){
   );
 }
 function ContentItemEditor({item,num,onChange,titleOnly}){
+  const srcColor={'firecrawl':'#16a34a','unsplash':'#2563eb','fallback':'#94a3b8','jasper':'#FF4F00'}[item.imageSource||'fallback']||'#94a3b8';
+  const srcLabel={'firecrawl':'📸 Real site image','unsplash':'🖼 Unsplash' + (item.imageQuery?' · '+item.imageQuery:''),'fallback':'◻ Curated fallback','jasper':'✦ Jasper'}[item.imageSource||'fallback']||'◻ Curated fallback';
   return(
     <div style={{display:'flex',gap:10,marginBottom:10,padding:10,background:'#f8fafc',borderRadius:8,border:'1px solid #e2e8f0'}}>
       <div style={{width:22,height:22,minWidth:22,background:'#e2e8f0',color:'#64748b',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,marginTop:2}}>{num}</div>
@@ -660,7 +662,17 @@ function ContentItemEditor({item,num,onChange,titleOnly}){
         <input value={item.title} placeholder="Title" onChange={e=>onChange({...item,title:e.target.value})}
           style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'6px 10px',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'#0f172a',marginBottom:6,outline:'none',background:'white'}}/>
         {!titleOnly&&<textarea value={item.summary} placeholder="Summary" rows={2} onChange={e=>onChange({...item,summary:e.target.value})}
-          style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'6px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',resize:'none',lineHeight:1.5,background:'white'}}/>}
+          style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'6px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',resize:'none',lineHeight:1.5,background:'white',marginBottom:6}}/>}
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {item.imageUrl&&<img src={item.imageUrl} alt="" style={{width:48,height:32,objectFit:'cover',borderRadius:4,border:'1px solid #e2e8f0',flexShrink:0}} onError={e=>e.target.style.display='none'}/>}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:srcColor}}>{srcLabel}</div>
+            {item.imageUrl&&<div style={{fontSize:10,color:'#94a3b8',marginTop:1,wordBreak:'break-all',maxWidth:220}}>{item.imageUrl.slice(0,60)}{item.imageUrl.length>60?'…':''}</div>}
+          </div>
+          <input type="text" value={item.imageUrl||''} onChange={e=>onChange({...item,imageUrl:e.target.value,imageSource:'manual'})}
+            placeholder="Override image URL…"
+            style={{flex:1,border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 8px',fontSize:11,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',background:'white',minWidth:0}}/>
+        </div>
       </div>
     </div>
   );
