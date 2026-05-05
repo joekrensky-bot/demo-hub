@@ -228,8 +228,16 @@ function navigate(path){window.location.hash=path;}
 
 /* ─── ROOT APP ─── */
 function App(){
+  const CONFIG_VERSION = '2025-05-04-v3';
   const [config,setConfig]=useState(()=>{
-    try{const s=localStorage.getItem('hub_config');return s?{...DEFAULT_CONFIG,...JSON.parse(s)}:DEFAULT_CONFIG;}
+    try{
+      const s=localStorage.getItem('hub_config');
+      if(!s) return DEFAULT_CONFIG;
+      const parsed=JSON.parse(s);
+      // If version mismatch, wipe stale config
+      if(parsed._version !== CONFIG_VERSION){ localStorage.clear(); return DEFAULT_CONFIG; }
+      return{...DEFAULT_CONFIG,...parsed};
+    }
     catch{return DEFAULT_CONFIG;}
   });
   const [contentfulItems,setContentfulItems]=useState([]);
@@ -240,7 +248,7 @@ function App(){
   const updateConfig=useCallback((updates)=>{
     setConfig(prev=>{
       const next={...prev,...updates};
-      localStorage.setItem('hub_config',JSON.stringify(next));
+      localStorage.setItem('hub_config',JSON.stringify({...next,_version:CONFIG_VERSION}));
       applyBrandVars(next);
       return next;
     });
@@ -341,8 +349,8 @@ function SetupPage(){
       const brand=await scrapeBrand(url.trim());
       clearInterval(iv);
       const autoTheme=detectTheme(brand.companyName, brand.aboutText);
-      // Wipe old config first so nothing bleeds through from previous analysis
-      localStorage.removeItem('hub_config');
+      // Wipe entire localStorage then set fresh config
+      localStorage.clear();
       updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId,deliveryKey,...brand,theme:autoTheme,generated:false});
       navigate('/validate');
     }catch(e){
@@ -461,7 +469,7 @@ function SetupPage(){
         <p style={{textAlign:'center',marginTop:24,fontSize:13,color:'#94a3b8'}}>
           ⚡ Powered by <strong style={{color:'#FF4F00'}}>Jasper AI</strong> · Content Hub Demo Builder
           {' · '}
-          <button onClick={()=>{localStorage.removeItem('hub_config');window.location.reload();}}
+          <button onClick={()=>{localStorage.clear();window.location.reload();}}
             style={{background:'none',border:'none',color:'#94a3b8',fontSize:13,cursor:'pointer',textDecoration:'underline',fontFamily:'DM Sans,sans-serif',padding:0}}>
             Reset
           </button>
