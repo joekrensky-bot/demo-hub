@@ -210,7 +210,7 @@ function SetupPage(){
   const [showManual,setShowManual]=useState(false);
   const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
 
-  const steps=['Fetching site identity…','Extracting brand colors…','Analyzing content themes…','Building article stubs…','Generating news items…','Preparing your hub…'];
+  const steps=['Crawling site with Jasper…','Searching for real articles…','Scanning news & press…','Extracting brand identity…','Structuring content…','Building your hub…'];
 
   const handleAnalyze=async()=>{
     if(!url.trim()){setError('Please enter a prospect URL');return;}
@@ -224,7 +224,7 @@ function SetupPage(){
       navigate('/validate');
     }catch(e){
       clearInterval(iv);
-      setError('Could not analyze site. Try manual setup or check the URL.');
+      setError('Error: ' + (e.message||String(e)));
       setLoading(false);
     }
   };
