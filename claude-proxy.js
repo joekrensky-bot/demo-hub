@@ -287,18 +287,15 @@ exports.handler = async (event) => {
     if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
     if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
     if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+    // Extract images from markdown AND from Firecrawl's screenshot/images array
     siteImages = extractImagesFromMarkdown(homeMarkdown);
-  }
-
-  // ── Await Firecrawl result ──
-  const fcData = await firecrawlPromise;
-  if (fcData) {
-    const meta = fcData.data?.metadata || fcData.metadata || {};
-    homeMarkdown = String(fcData.data?.markdown || fcData.data?.content || '').slice(0, 4000);
-    if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
-    if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
-    if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
-    siteImages = extractImagesFromMarkdown(homeMarkdown);
+    // Also check Firecrawl's dedicated images array if present
+    const fcImages = fcData.data?.images || fcData.images || [];
+    const extraImgs = fcImages
+      .filter(u => u && typeof u === 'string' && u.startsWith('http') && !u.includes('logo') && !u.includes('icon') && !u.includes('favicon'))
+      .slice(0, 10);
+    siteImages = [...new Set([...siteImages, ...extraImgs])];
+    console.log('Firecrawl images found:', siteImages.length, siteImages.slice(0,3));
   }
 
   // ── GPT structures content ──
@@ -352,27 +349,33 @@ exports.handler = async (event) => {
     if (articles.length < 6) articles = [...articles, ...makePlaceholderArticles(companyName, 6-articles.length, 'article')];
     if (news.length < 6) news = [...news, ...makePlaceholderArticles(companyName, 6-news.length, 'news')];
 
-    // Map items with smart image selection
-    const mapItem = async (a, i, type) => {
-      const img = await getArticleImage(siteImages, i, a.category, companyName, a.title);
-      return {
-        id: type+'-'+i,
-        title: String(a.title || type+' '+(i+1)),
-        summary: String(a.summary || ''),
-        imageUrl: String(img||'').split('|')[0],
-        imageSource: String(img||'').includes('|source:') ? String(img).split('|source:')[1].split('|')[0] : 'fallback',
-        imageQuery: String(img||'').includes('|query:') ? String(img).split('|query:')[1] : '',
-        slug: String(a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || type+'-'+i),
-        category: String(a.category || (type==='news'?'News':'Insights')),
-        readTime: String(a.readTime || '5 min read'),
-        date: String(a.date || '2025-05-04'),
-        body: String(a.body || ''),
-        source: 'scraped', isNew: false,
-      };
-    };
+    // Fetch ALL images in parallel then map synchronously
+    const allItems = [
+      ...articles.slice(0,6).map((a,i) => ({a,i,type:'article'})),
+      ...news.slice(0,6).map((n,i) => ({a:n,i,type:'news'})),
+    ];
+    const imageResults = await Promise.all(
+      allItems.map(({a,i,type}) => getArticleImage(siteImages, i, a.category, companyName, a.title))
+    );
+    console.log('Image sources:', imageResults.map(r => String(r).split('|source:')[1]?.split('|')[0] || 'fallback'));
 
-    const mappedArticles = await Promise.all(articles.slice(0,6).map((a,i) => mapItem(a,i,'article')));
-    const mappedNews = await Promise.all(news.slice(0,6).map((n,i) => mapItem(n,i,'news')));
+    const buildItem = (a, i, type, img) => ({
+      id: type+'-'+i,
+      title: String(a.title || type+' '+(i+1)),
+      summary: String(a.summary || ''),
+      imageUrl: String(img||'').split('|')[0],
+      imageSource: String(img||'').includes('|source:') ? String(img).split('|source:')[1].split('|')[0] : 'fallback',
+      imageQuery: String(img||'').includes('|query:') ? String(img).split('|query:')[1] : '',
+      slug: String(a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || type+'-'+i),
+      category: String(a.category || (type==='news'?'News':'Insights')),
+      readTime: String(a.readTime || '5 min read'),
+      date: String(a.date || '2025-05-04'),
+      body: String(a.body || ''),
+      source: 'scraped', isNew: false,
+    });
+
+    const mappedArticles = articles.slice(0,6).map((a,i) => buildItem(a,i,'article',imageResults[i]));
+    const mappedNews = news.slice(0,6).map((n,i) => buildItem(n,i,'news',imageResults[6+i]));
 
     return {
       statusCode: 200, headers,
