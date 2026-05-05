@@ -309,7 +309,7 @@ exports.handler = async (event) => {
 
     if(!gptRes.ok) {
       const e = await gptRes.text();
-      return {statusCode:gptRes.status, headers, body:JSON.stringify({error:'OpenAI '+gptRes.status+': '+e})};
+      return {statusCode:gptRes.status, headers, body:JSON.stringify({error:'OpenAI '+gptRes.status+': '+e, _debug:logs})};
     }
 
     const brand = JSON.parse((await gptRes.json()).choices[0].message.content);
@@ -355,6 +355,7 @@ exports.handler = async (event) => {
     return {
       statusCode:200, headers,
       body: JSON.stringify({
+        _debug: logs,
         companyName,
         brandPrimary: String(brand.brandPrimary||'#0f172a'),
         brandAccent: String(brand.brandAccent||'#6366f1'),
@@ -376,6 +377,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch(err) {
-    return {statusCode:500, headers, body:JSON.stringify({error:String(err.message)})};
+    return {statusCode:500, headers, body:JSON.stringify({error:String(err.message), _debug:logs})};
   }
 };
