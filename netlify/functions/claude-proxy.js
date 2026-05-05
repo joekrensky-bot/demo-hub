@@ -141,8 +141,8 @@ exports.handler = async (event) => {
   log('og+SERP+article start');
   const [_, articleResults, newsResults, articleScrapeData] = await Promise.all([
     ogPromise,
-    serpSearch(domain + ' blog articles insights 2025'),
-    serpSearch(domain + ' news press release announcement 2025'),
+    serpSearch(domain + ' blog'),
+    serpSearch(domain + ' news 2025'),
     articleScrapePromise,
   ]);
 
@@ -307,14 +307,14 @@ exports.handler = async (event) => {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
       body: JSON.stringify({
-        model:'gpt-4o', max_tokens:2500,
+        model:'gpt-4o', max_tokens:2000,
         response_format:{type:'json_object'},
         messages:[
           {role:'system', content:'You are a content hub builder. Return valid JSON only, no markdown.'},
           {role:'user', content:userPrompt},
         ],
       }),
-      signal: AbortSignal.timeout(5500),
+      signal: AbortSignal.timeout(8000),
     });
 
     if(!gptRes.ok) {
