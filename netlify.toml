@@ -1,7 +1,6 @@
-[[redirects]]
-  from = "/api/claude-proxy"
-  to = "/.netlify/functions/claude-proxy"
-  status = 200
+[functions]
+  directory = "netlify/functions"
+  timeout = 26
 
 [[redirects]]
   from = "/*"
