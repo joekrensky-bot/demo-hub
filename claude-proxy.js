@@ -201,14 +201,12 @@ exports.handler = async (event) => {
       };
     };
 
-    // Fetch all images in parallel
+    // Synchronous image assignment
     const allManual = [
       ...articles.slice(0,6).map((a,i) => ({...a,_idx:i,_type:'article'})),
       ...news.slice(0,6).map((n,i) => ({...n,_idx:i,_type:'news'})),
     ];
-    const manualImgs = await Promise.all(
-      allManual.map(item => getArticleImage([], item._idx, item.category, companyName, item.title))
-    );
+    const manualImgs = allManual.map(item => getArticleImage([], item._idx, item.category, companyName, item.title));
     const mapManualSync = (a, i, type, img) => ({
       id: type+'-'+i,
       title: String(a.title || type+' '+(i+1)),
@@ -331,7 +329,7 @@ exports.handler = async (event) => {
           { role: 'user', content: userPrompt },
         ],
       }),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(7000),
     });
 
     if (!gptRes.ok) {
@@ -349,15 +347,13 @@ exports.handler = async (event) => {
     if (articles.length < 6) articles = [...articles, ...makePlaceholderArticles(companyName, 6-articles.length, 'article')];
     if (news.length < 6) news = [...news, ...makePlaceholderArticles(companyName, 6-news.length, 'news')];
 
-    // Fetch ALL images in parallel then map synchronously
+    // Synchronous image assignment — no API calls, instant
     const allItems = [
       ...articles.slice(0,6).map((a,i) => ({a,i,type:'article'})),
       ...news.slice(0,6).map((n,i) => ({a:n,i,type:'news'})),
     ];
-    const imageResults = await Promise.all(
-      allItems.map(({a,i,type}) => getArticleImage(siteImages, i, a.category, companyName, a.title))
-    );
-    console.log('Image sources:', imageResults.map(r => String(r).split('|source:')[1]?.split('|')[0] || 'fallback'));
+    const imageResults = allItems.map(({a,i}) => getArticleImage(siteImages, i, a.category, companyName, a.title));
+    console.log('Firecrawl images:', siteImages.length, '| Sources:', imageResults.map(r => String(r).split('|source:')[1]?.split('|')[0]));
 
     const buildItem = (a, i, type, img) => ({
       id: type+'-'+i,
