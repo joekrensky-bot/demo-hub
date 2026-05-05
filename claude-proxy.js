@@ -119,83 +119,36 @@ exports.handler = async (event) => {
   let ogTitle = '';
   let ogDesc = '';
 
-  if (FIRECRAWL_KEY) {
-    try {
-      const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+  // Run homepage + top blog paths in parallel, 10s timeout each
+  const fcFetch = (fcUrl) => FIRECRAWL_KEY
+    ? fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + FIRECRAWL_KEY,
-        },
-        body: JSON.stringify({
-          url: clean,
-          formats: ['markdown', 'extract'],
-          extract: {
-            schema: {
-              type: 'object',
-              properties: {
-                headline: { type: 'string' },
-                subheadline: { type: 'string' },
-                ogImage: { type: 'string' },
-                ogTitle: { type: 'string' },
-                ogDescription: { type: 'string' },
-                brandColors: { type: 'string' },
-                products: { type: 'array', items: { type: 'string' } },
-              },
-            },
-          },
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
+        body: JSON.stringify({ url: fcUrl, formats: ['markdown'] }),
+        signal: AbortSignal.timeout(10000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
 
-      if (fcRes.ok) {
-        const fcData = await fcRes.json();
-        // Firecrawl v1 returns data.markdown or data.content
-        const rawMd = fcData.data?.markdown || fcData.data?.content || fcData.markdown || '';
-        homeMarkdown = String(rawMd || '').slice(0, 8000);
-        // Metadata can be nested differently across versions
-        const meta = fcData.data?.metadata || fcData.metadata || {};
-        const ex = fcData.data?.extract || fcData.extract || {};
-        ogImage = String(ex.ogImage || meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
-        ogTitle = String(ex.ogTitle || meta.ogTitle || meta['og:title'] || meta.title || '');
-        ogDesc = String(ex.ogDescription || meta.ogDescription || meta['og:description'] || meta.description || '');
-      } else {
-        // Firecrawl failed — log status but continue
-        const errBody = await fcRes.text();
-        console.log('Firecrawl error', fcRes.status, errBody.slice(0, 200));
-      }
-    } catch(e) { /* silent */ }
+  const blogPaths = ['/blog', '/news', '/articles', '/insights', '/resources', '/newsroom'];
+  const [homeData, ...blogResults] = await Promise.all([
+    fcFetch(clean),
+    ...blogPaths.map(p => fcFetch('https://' + domain + p)),
+  ]);
+
+  if (homeData) {
+    const meta = homeData.data?.metadata || homeData.metadata || {};
+    homeMarkdown = String(homeData.data?.markdown || homeData.data?.content || '').slice(0, 6000);
+    ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+    ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+    ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
   }
 
-  // ── Step 2: Firecrawl blog/news pages for real articles ──
+  // ── Step 2: pick first blog result with real content ──
   let blogMarkdown = '';
-  if (FIRECRAWL_KEY && homeMarkdown) {
-    const blogPaths = ['/blog', '/news', '/articles', '/insights', '/resources',
-                       '/press', '/newsroom', '/learn', '/stories', '/updates'];
-    for (const path of blogPaths) {
-      try {
-        const bRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + FIRECRAWL_KEY,
-          },
-          body: JSON.stringify({
-            url: 'https://' + domain + path,
-            formats: ['markdown'],
-          }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          const md = String(bData.data?.markdown || bData.data?.content || bData.markdown || '').trim();
-          if (md.length > 300) {
-            blogMarkdown = md.slice(0, 6000);
-            break;
-          }
-        }
-      } catch(e) { continue; }
-    }
+  for (const bd of blogResults) {
+    if (!bd) continue;
+    const md = String(bd.data?.markdown || bd.data?.content || '').trim();
+    if (md.length > 300) { blogMarkdown = md.slice(0, 5000); break; }
   }
 
   // Og tag fallback if Firecrawl wasn't available
@@ -266,12 +219,12 @@ exports.handler = async (event) => {
     '  "heroHeadline": "real headline from site max 8 words",',
     '  "heroSubheading": "real subheadline from site 1 sentence",',
     '  "heroImageUrl": "' + s(ogImage) + '",',
-    '  "articles": [{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"YYYY-MM-DD","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],',
-    '  "news": [{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"YYYY-MM-DD","body":"<p>para</p><p>para</p>"}],',
+    '  "articles": [{"title":"","summary":"2-3 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-04 or 2025-05 (recent dates only)","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],',
+    '  "news": [{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-04 or 2025-05 (recent dates only)","body":"<p>para</p><p>para</p>"}],',
     '  "aboutText": "2-3 paragraphs",',
     '  "products": [{"name":"","description":"","cta":"Learn more"}]',
     '}',
-    'All slugs lowercase-hyphenated. Use real scraped content first, fill gaps with brand knowledge.',
+    'All slugs lowercase-hyphenated. All dates must be in 2025 (April or May preferred). Use real scraped content first, fill gaps with brand knowledge.',
   ].join('\n');
 
   try {
