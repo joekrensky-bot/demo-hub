@@ -81,12 +81,12 @@ function fmtDateLong(d){
 }
 function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
 
-async function scrapeBrand(url){
-  const clean=url.startsWith('http')?url:'https://'+url;
+async function scrapeBrand(url, manual=false){
+  const clean=url?(url.startsWith('http')?url:'https://'+url):'';
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({url:clean})
+    body:JSON.stringify({url:clean, manual})
   });
   if(!res.ok){const e=await res.text();throw new Error('Proxy '+res.status+': '+e);}
   const data=await res.json();
@@ -210,7 +210,7 @@ function SetupPage(){
   const [showManual,setShowManual]=useState(false);
   const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
 
-  const steps=['Crawling site with Jasper…','Searching for real articles…','Scanning news & press…','Extracting brand identity…','Structuring content…','Building your hub…'];
+  const steps=['Crawling site with Firecrawl…','Extracting real articles…','Analyzing brand identity…','Structuring content…','Building your hub…','Almost there…'];
 
   const handleAnalyze=async()=>{
     if(!url.trim()){setError('Please enter a prospect URL');return;}
@@ -229,12 +229,32 @@ function SetupPage(){
     }
   };
 
-  const handleManual=()=>{
-    updateConfig({prospectUrl:url.trim(),spaceId,deliveryKey,...manual,
-      brandHeaderText:bestTextColor(manual.brandPrimary),
-      companyName:url?url.replace(/https?:\/\//,'').split('/')[0]:'Content Hub',
-    });
-    navigate('/validate');
+  const handleManual=async()=>{
+    // Path A: Jasper-generated content with manual colors
+    setError('');setLoading(true);
+    let i=0;setLoadingMsg('Generating content with Jasper…');
+    const iv=setInterval(()=>{
+      const msgs=['Generating articles with Jasper…','Writing news items…','Building your hub…'];
+      i=(i+1)%msgs.length;setLoadingMsg(msgs[i]);
+    },2500);
+    try{
+      const companyName=url.trim()?url.trim().replace(/https?:\/\//,'').split('/')[0]:'Content Hub';
+      const brand=await scrapeBrand(companyName, true);
+      clearInterval(iv);
+      updateConfig({prospectUrl:'',spaceId,deliveryKey,...manual,
+        brandHeaderText:bestTextColor(manual.brandPrimary),
+        companyName,
+        articles: brand.articles||[],
+        news: brand.news||[],
+        aboutText: brand.aboutText||'',
+        products: brand.products||[],
+      });
+      navigate('/validate');
+    }catch(e){
+      clearInterval(iv);
+      setError('Jasper error: '+(e.message||String(e)));
+      setLoading(false);
+    }
   };
 
   return(
