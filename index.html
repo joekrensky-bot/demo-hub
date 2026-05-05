@@ -853,36 +853,6 @@ function HeroSection({config}){
   );
 }
 
-){
-  const ts=getThemeStyles(config.theme||'generic',config);
-  const isMonospace=ts.heroFont==='monospace';
-  return(
-    <section style={{minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
-      background:config.heroImageUrl
-        ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
-        :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
-      position:'relative',overflow:'hidden'}}>
-      <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
-        <div style={{maxWidth:600}}>
-          <div style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.95)',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:20}}>
-            ⚡ Resource Hub
-          </div>
-          <h1 style={{fontFamily:ts.heroFont,fontSize:52,color:'white',lineHeight:1.1,marginBottom:16,letterSpacing:isMonospace?'0.02em':'-0.5px',textShadow:'0 2px 12px rgba(0,0,0,0.4)'}}>{config.heroHeadline}</h1>
-          <p style={{fontSize:18,color:'rgba(255,255,255,0.92)',lineHeight:1.6,marginBottom:32,maxWidth:480,textShadow:'0 1px 6px rgba(0,0,0,0.3)'}}>{config.heroSubheading}</p>
-          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-            <a href="#/demo/articles" style={{display:'inline-flex',alignItems:'center',gap:6,color:'white',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',background:config.brandAccent}}>
-              {isMonospace?'EXPLORE ARTICLES →':'Explore Articles →'}
-            </a>
-            <a href="#/demo/news" style={{display:'inline-flex',alignItems:'center',color:'rgba(255,255,255,0.9)',padding:'13px 24px',borderRadius:ts.btnRadius,fontSize:15,fontWeight:600,textDecoration:'none',border:'1.5px solid rgba(255,255,255,0.35)'}}>
-              {isMonospace?'LATEST NEWS':'Latest News'}
-            </a>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function DemoHub(){
   const {config,contentfulItems}=useHub();
   const [countdown,setCountdown]=useState(30);
