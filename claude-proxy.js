@@ -123,7 +123,29 @@ exports.handler = async (event) => {
 
   serpArticles = articleResults;
   serpNews = newsResults;
-  console.log('SERP articles:', serpArticles.length, '| news:', serpNews.length, '| ogTitle:', ogTitle.slice(0,40));
+  console.log('Mode:', mode, '| SERP articles:', serpArticles.length, '| news:', serpNews.length);
+
+  // ── DEEP MODE: scrape actual pages for real images ────────────
+  let siteImages = [];
+  if (mode === 'deep' && FIRECRAWL_KEY && serpArticles.length > 0) {
+    const pageUrls = serpArticles.slice(0,3).map(a => a.url).filter(Boolean);
+    const scrapes = await Promise.all(pageUrls.map(pageUrl =>
+      fetch('https://api.firecrawl.dev/v1/scrape', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+FIRECRAWL_KEY},
+        body: JSON.stringify({ url: pageUrl, formats: ['markdown'] }),
+        signal: AbortSignal.timeout(4000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null)
+    ));
+    for(const r of scrapes) {
+      if(!r) continue;
+      const md = String(r.data?.markdown||'');
+      const imgs = [...md.matchAll(/!\[.*?\]\((https?:\/\/[^)]+\.(?:jpg|jpeg|png|webp)[^)]*)\)/gi)]
+        .map(m => m[1]).filter(u => !u.includes('logo') && !u.includes('icon'));
+      siteImages.push(...imgs.slice(0,2));
+    }
+    console.log('Deep mode site images:', siteImages.length);
+  }
 
   // ── STEP 2: GPT structures brand + fills gaps ─────────────────
   const s = v => v == null ? '' : String(v);
@@ -175,21 +197,28 @@ exports.handler = async (event) => {
     if(articles.length < 6) articles = [...articles, ...makePlaceholders(companyName, 6-articles.length, 'article')];
     if(news.length < 6) news = [...news, ...makePlaceholders(companyName, 6-news.length, 'news')];
 
-    // Rotate through different fallback images so they're not all identical
-    const fallbackPool = Object.values(FALLBACK_IMAGES).filter((_,i) => i < Object.values(FALLBACK_IMAGES).length-1);
-    const buildItem = (a, i, type) => ({
+    const fallbackPool = Object.values(FALLBACK_IMAGES);
+    const buildItem = (a, i, type) => {
+      let imageUrl, imageSource;
+      if(siteImages[i]) {
+        imageUrl = siteImages[i]; imageSource = 'firecrawl';
+      } else {
+        imageUrl = fallbackPool[i % fallbackPool.length] || getFallback(a.category, a.title);
+        imageSource = 'fallback';
+      }
+      return {
       id: type+'-'+i,
       title: String(a.title || type+' '+(i+1)),
       summary: String(a.summary || ''),
-      imageUrl: fallbackPool[i % fallbackPool.length] || getFallback(a.category, a.title),
-      imageSource: 'fallback',
+      imageUrl, imageSource,
       slug: String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||type+'-'+i),
       category: String(a.category||(type==='news'?'News':'Insights')),
       readTime: String(a.readTime||'5 min read'),
       date: String(a.date||'2025-05-04'),
       body: String(a.body||''),
       source:'scraped', isNew:false,
-    });
+      };
+    };
 
     return {
       statusCode:200, headers,

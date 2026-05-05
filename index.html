@@ -201,12 +201,12 @@ function getThemeStyles(themeId, config) {
 function slugify(s){return(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
 
 
-async function scrapeBrand(url, manual=false){
+async function scrapeBrand(url, manual=false, mode='fast'){
   const clean=url?(url.startsWith('http')?url:'https://'+url):'';
   const res=await fetch('/.netlify/functions/claude-proxy',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({url:clean, manual})
+    body:JSON.stringify({url:clean, manual, mode})
   });
   if(!res.ok){const e=await res.text();throw new Error('Proxy '+res.status+': '+e);}
   const data=await res.json();
@@ -383,6 +383,7 @@ function App(){
 function SetupPage(){
   const {config,updateConfig,DEFAULT_CONFIG}=useHub();
   const [url,setUrl]=useState(config.prospectUrl||'');
+  const [scrapeMode,setScrapeMode]=useState('fast'); // 'fast' or 'deep'
   const [spaceId,setSpaceId]=useState(config.spaceId||DEFAULT_CONFIG.spaceId);
   const [deliveryKey,setDeliveryKey]=useState(config.deliveryKey||DEFAULT_CONFIG.deliveryKey);
   const [loading,setLoading]=useState(false);
@@ -402,7 +403,7 @@ function SetupPage(){
   '🖼️ Hunting for good images…',
   '💅 Making it look pretty…',
   '🚀 Almost ready, hang tight…',
-  '🐌 Still going, promise it's worth it…',
+  '🐌 Still going — totally worth the wait…',
   '✨ Putting on the finishing touches…',
 ];
 
@@ -412,7 +413,7 @@ function SetupPage(){
     let i=0;setLoadingMsg(steps[0]);
     const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},1500);
     try{
-      const brand=await scrapeBrand(url.trim());
+      const brand=await scrapeBrand(url.trim(), false, scrapeMode);
       clearInterval(iv);
       const autoTheme=detectTheme(brand.companyName, brand.aboutText);
       // Wipe entire localStorage then set fresh config
@@ -495,6 +496,39 @@ function SetupPage(){
 
 
 
+          {/* Scrape mode toggle */}
+          <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+            <div style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em'}}>Analysis mode</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <button onClick={()=>setScrapeMode('fast')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>SERP + GPT content. ~8s, reliable. Real article titles from search.</div>
+              </button>
+              <button onClick={()=>setScrapeMode('deep')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full page scrape for images + copy. ~20s, may timeout on some sites.</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Scrape mode toggle */}
+          <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+            <div style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em'}}>Analysis mode</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <button onClick={()=>setScrapeMode('fast')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>SERP titles + GPT content. ~8s, reliable.</div>
+              </button>
+              <button onClick={()=>setScrapeMode('deep')}
+                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
+                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full scrape for real images + copy. ~20s, may timeout.</div>
+              </button>
+            </div>
+          </div>
           {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:16}}>⚠ {error}</div>}
 
           {!loading
