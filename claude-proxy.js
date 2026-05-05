@@ -186,8 +186,30 @@ exports.handler = async (event) => {
       };
     };
 
-    const mappedArticles = await Promise.all(articles.slice(0,6).map((a,i) => mapManual(a,i,'article')));
-    const mappedNews = await Promise.all(news.slice(0,6).map((n,i) => mapManual(n,i,'news')));
+    // Fetch all images in parallel
+    const allManual = [
+      ...articles.slice(0,6).map((a,i) => ({...a,_idx:i,_type:'article'})),
+      ...news.slice(0,6).map((n,i) => ({...n,_idx:i,_type:'news'})),
+    ];
+    const manualImgs = await Promise.all(
+      allManual.map(item => getArticleImage([], item._idx, item.category, companyName, item.title))
+    );
+    const mapManualSync = (a, i, type, img) => ({
+      id: type+'-'+i,
+      title: String(a.title || type+' '+(i+1)),
+      summary: String(a.summary || ''),
+      imageUrl: String(img||'').split('|')[0],
+      imageSource: String(img||'').includes('|source:') ? String(img).split('|source:')[1].split('|')[0] : 'fallback',
+      imageQuery: String(img||'').includes('|query:') ? String(img).split('|query:')[1] : '',
+      slug: String(a.slug || (a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-') || type+'-'+i),
+      category: String(a.category || (type==='news'?'News':'Insights')),
+      readTime: String(a.readTime || '5 min read'),
+      date: String(a.date || '2025-05-04'),
+      body: String(a.body || ''),
+      source: 'jasper', isNew: false,
+    });
+    const mappedArticles = articles.slice(0,6).map((a,i) => mapManualSync(a,i,'article',manualImgs[i]));
+    const mappedNews = news.slice(0,6).map((n,i) => mapManualSync(n,i,'news',manualImgs[6+i]));
 
     return {
       statusCode: 200, headers,
@@ -233,27 +255,35 @@ exports.handler = async (event) => {
     }
   } catch(e) {}
 
-  // ── Firecrawl homepage ──
+  // ── Firecrawl: run concurrently with og scrape, 3s max ──
   let siteImages = [];
-  if (FIRECRAWL_KEY) {
-    try {
-      const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
-        body: JSON.stringify({ url: clean, formats: ['markdown'] }),
-        signal: AbortSignal.timeout(4000),
-      });
-      if (fcRes.ok) {
-        const fcData = await fcRes.json();
-        const meta = fcData.data?.metadata || fcData.metadata || {};
-        homeMarkdown = String(fcData.data?.markdown || fcData.data?.content || '').slice(0, 5000);
-        if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
-        if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
-        if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
-        // Extract real images from the scraped page
-        siteImages = extractImagesFromMarkdown(homeMarkdown);
-      }
-    } catch(e) {}
+  const firecrawlPromise = FIRECRAWL_KEY ? fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
+    body: JSON.stringify({ url: clean, formats: ['markdown'] }),
+    signal: AbortSignal.timeout(3000),
+  }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null);
+
+  // ── Await Firecrawl result ──
+  const fcData = await firecrawlPromise;
+  if (fcData) {
+    const meta = fcData.data?.metadata || fcData.metadata || {};
+    homeMarkdown = String(fcData.data?.markdown || fcData.data?.content || '').slice(0, 4000);
+    if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+    if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+    if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+    siteImages = extractImagesFromMarkdown(homeMarkdown);
+  }
+
+  // ── Await Firecrawl result ──
+  const fcData = await firecrawlPromise;
+  if (fcData) {
+    const meta = fcData.data?.metadata || fcData.metadata || {};
+    homeMarkdown = String(fcData.data?.markdown || fcData.data?.content || '').slice(0, 4000);
+    if (!ogImage) ogImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+    if (!ogTitle) ogTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+    if (!ogDesc) ogDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+    siteImages = extractImagesFromMarkdown(homeMarkdown);
   }
 
   // ── GPT structures content ──
@@ -289,7 +319,7 @@ exports.handler = async (event) => {
           { role: 'user', content: userPrompt },
         ],
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!gptRes.ok) {
