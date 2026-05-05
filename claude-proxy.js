@@ -202,6 +202,11 @@ exports.handler = async (event) => {
     if(articles.length < 6) articles = [...articles, ...makePlaceholders(companyName, 6-articles.length, 'article')];
     if(news.length < 6) news = [...news, ...makePlaceholders(companyName, 6-news.length, 'news')];
 
+    // Insert featured article as position-1 if we have one
+    if (featuredArticle) {
+      articles = [featuredArticle, ...articles.slice(0, 5)];
+    }
+
     const fallbackPool = Object.values(FALLBACK_IMAGES);
     const buildItem = (a, i, type) => {
       let imageUrl, imageSource;
@@ -238,7 +243,12 @@ exports.handler = async (event) => {
         heroHeadline: String(brand.heroHeadline||ogTitle||'Insights & Resources'),
         heroSubheading: String(brand.heroSubheading||ogDesc||'Stay ahead with the latest thinking.'),
         heroImageUrl: String(ogImage||''),
-        articles: articles.slice(0,6).map((a,i)=>buildItem(a,i,'article')),
+        featuredArticle: featuredArticle ? {
+          jasperDocId: featuredArticle.jasperDocId,
+          jasperDocUrl: featuredArticle.jasperDocUrl,
+          title: featuredArticle.title,
+        } : null,
+        articles: articles.slice(0,6).map((a,i)=>i===0&&featuredArticle ? featuredArticle : buildItem(a,i,'article')),
         news: news.slice(0,6).map((n,i)=>buildItem(n,i,'news')),
         aboutText: String(brand.aboutText||''),
         products: brand.products||[],

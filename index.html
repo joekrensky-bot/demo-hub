@@ -35,7 +35,8 @@ const {useState, useEffect, useContext, createContext, useRef, useCallback} = Re
 const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
-  prospectUrl:'',brandPrimary:'#0f172a',brandAccent:'#6366f1',
+  jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+  prospectUrl:'',articleUrl:'',brandPrimary:'#0f172a',brandAccent:'#6366f1',
   brandBg:'#f9f7f4',brandText:'#0f172a',brandHeaderText:'#ffffff',
   companyName:'Content Hub',logoUrl:'',
   heroHeadline:'Insights & Resources',
@@ -371,33 +372,60 @@ function App(){
   );
 }
 
-/* ─── SETUP PAGE ─── */
-function ThemeToggle({value, onChange}){
-  const {THEMES}=useHub();
+/* ─── SETTINGS PANEL ─── */
+function SettingsPanel({onClose}){
+  const {config,updateConfig}=useHub();
+  const [vals,setVals]=useState({
+    jasperUserId: config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+    spaceId: config.spaceId||'b4hc9l38hrco',
+    deliveryKey: config.deliveryKey||'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
+  });
+  const field=(label,key,mono=false,placeholder='')=>(
+    <div style={{marginBottom:14}}>
+      <label style={{display:'block',fontSize:12,fontWeight:500,color:'#374151',marginBottom:5}}>{label}</label>
+      <input value={vals[key]} onChange={e=>setVals(p=>({...p,[key]:e.target.value}))} placeholder={placeholder}
+        style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'8px 12px',fontSize:mono?12:13,
+          fontFamily:mono?'monospace':'DM Sans,sans-serif',color:'#0f172a',outline:'none',background:'white'}}/>
+    </div>
+  );
   return(
-    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:4}}>
-      {Object.values(THEMES).map(t=>(
-        <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{
-            display:'flex',flexDirection:'column',alignItems:'center',gap:3,
-            padding:'8px 4px',border:value===t.id?'2px solid #6366f1':'1.5px solid #e2e8f0',
-            borderRadius:10,background:value===t.id?'#eef2ff':'white',
-            cursor:'pointer',transition:'all 0.15s',fontFamily:'DM Sans,sans-serif',
-          }}>
-          <span style={{fontSize:18}}>{t.emoji}</span>
-          <span style={{fontSize:10,fontWeight:value===t.id?600:400,color:value===t.id?'#6366f1':'#374151',lineHeight:1.2,textAlign:'center'}}>{t.label}</span>
-        </button>
-      ))}
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'white',borderRadius:16,padding:'28px 32px',width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+          <div>
+            <h2 style={{fontSize:18,fontWeight:600,color:'#0f172a',marginBottom:2}}>⚙ Hub Settings</h2>
+            <p style={{fontSize:13,color:'#64748b'}}>Configure your workspace defaults</p>
+          </div>
+          <button onClick={onClose} style={{width:32,height:32,borderRadius:8,border:'1px solid #e2e8f0',background:'#f8fafc',cursor:'pointer',fontSize:16,color:'#64748b',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+        </div>
+        <div style={{marginBottom:8,paddingBottom:16,borderBottom:'1px solid #f1f5f9'}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Jasper</div>
+          {field('User ID','jasperUserId',true,'hTcTOK3m6xUCKwznLDLXwem3Y9E2')}
+        </div>
+        <div style={{marginTop:16,marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Contentful</div>
+          {field('Space ID','spaceId',true,'b4hc9l38hrco')}
+          {field('Delivery API Key','deliveryKey',true,'hH65WQ...')}
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:24}}>
+          <button onClick={onClose} style={{flex:1,padding:'10px',border:'1.5px solid #e2e8f0',borderRadius:10,background:'white',fontSize:14,color:'#64748b',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>Cancel</button>
+          <button onClick={()=>{updateConfig({jasperUserId:vals.jasperUserId,spaceId:vals.spaceId,deliveryKey:vals.deliveryKey});onClose();}}
+            style={{flex:2,padding:'10px',border:'none',borderRadius:10,background:'#FF4F00',color:'white',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+            Save Settings
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-
 /* ─── SETUP PAGE ─── */
 function SetupPage(){
-  const {config,updateConfig,DEFAULT_CONFIG,detectTheme,THEMES}=useHub();
+  const {config,updateConfig,DEFAULT_CONFIG,detectTheme}=useHub();
   const [url,setUrl]=useState(config.prospectUrl||'');
+  const [articleUrl,setArticleUrl]=useState(config.articleUrl||'');
   const [scrapeMode,setScrapeMode]=useState('fast');
+  const [showSettings,setShowSettings]=useState(false);
   const [loading,setLoading]=useState(false);
   const [loadingMsg,setLoadingMsg]=useState('');
   const [error,setError]=useState('');
@@ -419,41 +447,46 @@ function SetupPage(){
     '✨ Putting on the finishing touches...',
   ];
 
+  const doScrape=async(retrying=false)=>{
+    const clean=url.trim().startsWith('http')?url.trim():'https://'+url.trim();
+    const res=await fetch('/.netlify/functions/claude-proxy',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        url:clean, mode:scrapeMode,
+        articleUrl:articleUrl.trim()||null,
+        jasperUserId:config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+      })
+    });
+    if(!res.ok) throw new Error('Proxy '+res.status+': '+await res.text());
+    const data=await res.json();
+    if(data.error) throw new Error(data.error);
+    return data;
+  };
+
   const handleAnalyze=async()=>{
     if(!url.trim()){setError('Please enter a prospect URL');return;}
     setError('');setLoading(true);
     let i=0;setLoadingMsg(steps[0]);
     const iv=setInterval(()=>{i=(i+1)%steps.length;setLoadingMsg(steps[i]);},1500);
-    const doScrape=async()=>{
-      const clean=url.trim().startsWith('http')?url.trim():'https://'+url.trim();
-      const res=await fetch('/.netlify/functions/claude-proxy',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:clean,mode:scrapeMode})
-      });
-      if(!res.ok)throw new Error('Proxy '+res.status+': '+await res.text());
-      const data=await res.json();
-      if(data.error)throw new Error(data.error);
-      return data;
-    };
     try{
       const brand=await doScrape();
       clearInterval(iv);
       const autoTheme=detectTheme(brand.companyName,brand.aboutText);
       localStorage.clear();
-      updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),spaceId:DEFAULT_CONFIG.spaceId,deliveryKey:DEFAULT_CONFIG.deliveryKey,...brand,theme:autoTheme,generated:false});
+      updateConfig({...DEFAULT_CONFIG,...config,prospectUrl:url.trim(),articleUrl:articleUrl.trim(),...brand,theme:autoTheme,generated:false});
       navigate('/validate');
     }catch(e){
       try{
         setLoadingMsg('🔄 First attempt timed out — trying again...');
-        const brand2=await doScrape();
+        const brand2=await doScrape(true);
         clearInterval(iv);
         const autoTheme2=detectTheme(brand2.companyName,brand2.aboutText);
         localStorage.clear();
-        updateConfig({...DEFAULT_CONFIG,prospectUrl:url.trim(),...brand2,theme:autoTheme2,generated:false});
+        updateConfig({...DEFAULT_CONFIG,...config,prospectUrl:url.trim(),articleUrl:articleUrl.trim(),...brand2,theme:autoTheme2,generated:false});
         navigate('/validate');
       }catch(e2){
         clearInterval(iv);
-        setError('😅 ' + (e2.message||String(e2)));
+        setError('😅 '+(e2.message||String(e2)));
         setLoading(false);
       }
     }
@@ -467,9 +500,9 @@ function SetupPage(){
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({url:companyName,manual:true})
       });
-      if(!res.ok)throw new Error('Proxy '+res.status);
+      if(!res.ok) throw new Error('Proxy '+res.status);
       const brand=await res.json();
-      if(brand.error)throw new Error(brand.error);
+      if(brand.error) throw new Error(brand.error);
       updateConfig({...DEFAULT_CONFIG,...manual,brandHeaderText:bestTextColor(manual.brandPrimary),
         companyName,articles:brand.articles||[],news:brand.news||[],aboutText:brand.aboutText||'',products:brand.products||[]});
       navigate('/validate');
@@ -481,6 +514,7 @@ function SetupPage(){
 
   return(
     <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 16px 40px',fontFamily:'DM Sans,sans-serif'}}>
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)}/>}
       <div style={{width:'100%',maxWidth:560}}>
         <div style={{display:'flex',justifyContent:'center',marginBottom:32}}>
           <div style={{display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid #e2e8f0',borderRadius:100,padding:'8px 16px 8px 10px',fontSize:14,fontWeight:600,color:'#0f172a',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
@@ -488,18 +522,46 @@ function SetupPage(){
           </div>
         </div>
         <div style={{background:'white',borderRadius:20,padding:'36px 40px',boxShadow:'0 4px 32px rgba(0,0,0,0.08)',border:'1px solid #e2e8f0'}}>
-          <h1 style={{fontSize:26,fontWeight:600,color:'#0f172a',marginBottom:8,letterSpacing:'-0.3px'}}>Build a branded content hub</h1>
-          <p style={{fontSize:15,color:'#64748b',lineHeight:1.6,marginBottom:28}}>Enter your prospect URL — we extract their brand and generate a live demo hub.</p>
-          <div style={{marginBottom:16}}>
+          {/* Header row with settings cog */}
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+            <div>
+              <h1 style={{fontSize:26,fontWeight:600,color:'#0f172a',marginBottom:6,letterSpacing:'-0.3px'}}>Build a branded content hub</h1>
+              <p style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Enter your prospect URL — extract their brand and generate a live demo hub.</p>
+            </div>
+            <button onClick={()=>setShowSettings(true)} title="Settings"
+              style={{width:36,height:36,borderRadius:10,border:'1.5px solid #e2e8f0',background:'#f8fafc',cursor:'pointer',fontSize:16,color:'#64748b',flexShrink:0,marginLeft:12,marginTop:2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              ⚙
+            </button>
+          </div>
+
+          {/* Prospect URL */}
+          <div style={{marginBottom:14}}>
             <label style={{display:'block',fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>Prospect / Customer URL</label>
             <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
-              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center'}}>https://</span>
+              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>https://</span>
               <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!showManual&&handleAnalyze()}
-                placeholder="jasper.ai" disabled={loading}
+                placeholder="arcticwolf.com" disabled={loading}
                 style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
             </div>
           </div>
-          {/* Analysis mode toggle */}
+
+          {/* Article URL to optimize */}
+          <div style={{marginBottom:20}}>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>
+              <span style={{background:'#FF4F00',color:'white',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:4}}>NEW</span>
+              Article URL to optimize in Jasper
+              <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>— optional</span>
+            </label>
+            <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff',position:'relative'}}>
+              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>✦</span>
+              <input value={articleUrl} onChange={e=>setArticleUrl(e.target.value)}
+                placeholder="arcticwolf.com/blog/my-article" disabled={loading}
+                style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
+            </div>
+            <p style={{fontSize:11,color:'#94a3b8',marginTop:4,lineHeight:1.5}}>This article gets scraped, sent to Jasper as a document, and appears as the featured #1 card in the hub. Edit it in Jasper and publish to update the hub live.</p>
+          </div>
+
+          {/* Analysis mode */}
           <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
             <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Analysis mode</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -515,10 +577,12 @@ function SetupPage(){
               </button>
             </div>
           </div>
+
           {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:16}}>⚠ {error}</div>}
+
           {!loading
-            ?<button onClick={handleAnalyze} disabled={showManual}
-              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'pointer',opacity:showManual?0.5:1}}
+            ?<button onClick={handleAnalyze}
+              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'pointer'}}
               onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
               ✦ Analyze Site &amp; Build Hub
             </button>
@@ -550,7 +614,7 @@ function SetupPage(){
                 ))}
               </div>
               <button onClick={handleManual} disabled={loading}
-                style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:'pointer'}}>
+                style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
                 Generate with Jasper →
               </button>
             </div>
@@ -565,6 +629,7 @@ function SetupPage(){
     </div>
   );
 }
+
 
 /* ─── VALIDATE PAGE ─── */
 function ValidatePage(){
