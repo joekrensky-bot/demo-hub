@@ -302,6 +302,59 @@ function App(){
     return()=>clearInterval(iv);
   },[config.generated,config.spaceId,config.deliveryKey]);
 
+  // Enrich images with Unsplash after hub loads (non-blocking)
+  useEffect(()=>{
+    if(!config.generated)return;
+    const UNSPLASH_KEY='Rtko1nJ89-XlX5QfMqnp4ovSkMD37uAo5mApAwQlGHY';
+    const needsEnrichment=(items)=>items.some(a=>a.imageSource==='fallback'||!a.imageSource);
+    if(!needsEnrichment(config.articles||[])&&!needsEnrichment(config.news||[]))return;
+    const categoryToQuery=(category,title)=>{
+      const t=((category||'')+' '+(title||'')).toLowerCase();
+      if(t.includes('security')||t.includes('cyber'))return 'cybersecurity technology professional';
+      if(t.includes('ai')||t.includes('artificial'))return 'artificial intelligence technology';
+      if(t.includes('market'))return 'marketing team strategy meeting';
+      if(t.includes('content')||t.includes('writing'))return 'content creation laptop desk';
+      if(t.includes('growth')||t.includes('revenue'))return 'business growth success chart';
+      if(t.includes('data')||t.includes('analytic'))return 'data analytics dashboard';
+      if(t.includes('cloud')||t.includes('platform'))return 'cloud computing server technology';
+      if(t.includes('health')||t.includes('medical'))return 'healthcare medical professional';
+      if(t.includes('financ')||t.includes('invest'))return 'finance business professional';
+      if(t.includes('product')||t.includes('launch'))return 'product launch business team';
+      return 'business professional office team';
+    };
+    const fetchUnsplash=async(query,seed)=>{
+      try{
+        const r=await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=landscape&content_filter=high&per_page=10&client_id=${UNSPLASH_KEY}`);
+        if(!r.ok)return null;
+        const d=await r.json();
+        const results=d?.results||[];
+        if(!results.length)return null;
+        return results[seed%results.length]?.urls?.regular||null;
+      }catch{return null;}
+    };
+    const enrich=async()=>{
+      const articles=[...(config.articles||[])];
+      const news=[...(config.news||[])];
+      let changed=false;
+      for(let i=0;i<articles.length;i++){
+        if(articles[i].imageSource==='fallback'||!articles[i].imageSource){
+          const q=categoryToQuery(articles[i].category,articles[i].title);
+          const img=await fetchUnsplash(q,i);
+          if(img){articles[i]={...articles[i],imageUrl:img,imageSource:'unsplash'};changed=true;}
+        }
+      }
+      for(let i=0;i<news.length;i++){
+        if(news[i].imageSource==='fallback'||!news[i].imageSource){
+          const q=categoryToQuery(news[i].category,news[i].title);
+          const img=await fetchUnsplash(q,i+6);
+          if(img){news[i]={...news[i],imageUrl:img,imageSource:'unsplash'};changed=true;}
+        }
+      }
+      if(changed)updateConfig({articles,news});
+    };
+    enrich();
+  },[config.generated]);
+
   // Route guard
   const needsSetup=!config.generated;
   const isSetupRoute=route==='/setup'||route==='/validate';
