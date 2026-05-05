@@ -192,10 +192,10 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', max_tokens: 2000,
+        model: 'gpt-4o-mini', max_tokens: 600,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'Return valid JSON only.' },
+          { role: 'system', content: 'Return valid JSON only. Be concise.' },
           { role: 'user', content: prompt },
         ],
       }),
