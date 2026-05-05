@@ -100,7 +100,7 @@ exports.handler = async (event) => {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+FIRECRAWL_KEY},
         body: JSON.stringify({ query, limit: 8 }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(3000),
       });
       if(!r.ok){ console.log('SERP fail:',r.status,await r.text()); return []; }
       const d = await r.json();
@@ -121,9 +121,9 @@ exports.handler = async (event) => {
     serpSearch(domain + ' news announcement 2025'),
   ]);
 
-  serpArticles = articleResults;
-  serpNews = newsResults;
-  console.log('Mode:', mode, '| SERP articles:', serpArticles.length, '| news:', serpNews.length);
+  serpArticles = articleResults.slice(0,6);
+  serpNews = newsResults.slice(0,6);
+  console.log('Mode:', mode, '| SERP articles:', serpArticles.length, '| news:', serpNews.length, '| ogTitle:', ogTitle.slice(0,30));
 
   // ── DEEP MODE: scrape actual pages for real images ────────────
   let siteImages = [];
@@ -134,7 +134,7 @@ exports.handler = async (event) => {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+FIRECRAWL_KEY},
         body: JSON.stringify({ url: pageUrl, formats: ['markdown'] }),
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(3000),
       }).then(r => r.ok ? r.json() : null).catch(() => null)
     ));
     for(const r of scrapes) {
@@ -163,9 +163,9 @@ exports.handler = async (event) => {
     'og:title (heroHeadline — use exactly): ' + s(ogTitle),
     'og:description (heroSubheading — use exactly): ' + s(ogDesc),
     '',
-    'Return ONLY valid JSON:',
-    '{"companyName":"","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#hex","heroHeadline":"'+s(ogTitle).slice(0,80)+'","heroSubheading":"'+s(ogDesc).slice(0,200)+'","heroImageUrl":"'+s(ogImage)+'","articles":[{"title":"REAL title from SERP above","summary":"expand the SERP description into 2-3 sentences","slug":"","category":"real category","readTime":"5 min read","date":"YYYY-MM-DD","body":"<p>para</p><h2>heading</h2><p>para</p><p>para</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],"news":[{"title":"REAL title from SERP above","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"YYYY-MM-DD","body":"<p>para</p><p>para</p>"}],"aboutText":"2-3 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}',
-    'Use ALL real SERP titles first. Fill remaining slots to reach exactly 6 articles and 6 news items using brand knowledge. Slugs lowercase-hyphenated.',
+    'Return ONLY valid JSON (no markdown):',
+    '{"companyName":"","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#hex","heroHeadline":"'+s(ogTitle.slice(0,60)||domain)+'","heroSubheading":"'+s(ogDesc.slice(0,150))+'","heroImageUrl":"'+s(ogImage)+'","articles":[{"title":"","summary":"2 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-05-04","body":"<p>para</p><h2>heading</h2><p>para</p><blockquote><p>insight</p></blockquote><p>closing</p>"}],"news":[{"title":"","summary":"1-2 sentences","slug":"","category":"News","readTime":"2 min read","date":"2025-05-04","body":"<p>para</p>"}],"aboutText":"2 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}',
+    'Use real SERP titles first. Fill to 6 articles + 6 news. Slugs lowercase-hyphenated. Dates 2025-04 or 2025-05.',
   ].filter(Boolean).join('\n');
 
   try {
@@ -173,14 +173,14 @@ exports.handler = async (event) => {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
       body: JSON.stringify({
-        model:'gpt-4o', max_tokens:4000,
+        model:'gpt-4o', max_tokens:2500,
         response_format:{type:'json_object'},
         messages:[
           {role:'system', content:'You are a content hub builder. Return valid JSON only, no markdown.'},
           {role:'user', content:userPrompt},
         ],
       }),
-      signal: AbortSignal.timeout(7000),
+      signal: AbortSignal.timeout(5500),
     });
 
     if(!gptRes.ok) {
