@@ -27,17 +27,23 @@ exports.handler = async (event) => {
 
   // ── IMAGE HELPERS ──────────────────────────────────────────────
 
-  // Scenario 1: Unsplash API (best quality, needs key)
+  // Scenario 1: Unsplash search — sorted by relevance, pick by index for variety
   const unsplashImage = async (query, seed) => {
     if (!UNSPLASH_KEY) return null;
     try {
+      // Search returns top results sorted by relevance — much better than random
       const r = await fetch(
-        'https://api.unsplash.com/photos/random?query=' + encodeURIComponent(query) + '&orientation=landscape&client_id=' + UNSPLASH_KEY,
+        'https://api.unsplash.com/search/photos?query=' + encodeURIComponent(query) +
+        '&orientation=landscape&content_filter=high&per_page=10&client_id=' + UNSPLASH_KEY,
         { signal: AbortSignal.timeout(3000) }
       );
       if (r.ok) {
         const d = await r.json();
-        return d?.urls?.regular || null;
+        const results = d?.results || [];
+        if (results.length === 0) return null;
+        // Pick deterministically by seed so same article = same image
+        const pick = results[seed % results.length];
+        return pick?.urls?.regular || null;
       }
     } catch(e) {}
     return null;
