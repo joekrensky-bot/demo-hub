@@ -128,11 +128,22 @@ exports.handler = async (event) => {
   };
 
   // Run og scrape + 2 SERP searches all in parallel
-  log('og+SERP start');
-  const [_, articleResults, newsResults] = await Promise.all([
+  // Article scrape promise (runs in parallel with SERP if articleUrl provided)
+  const articleScrapePromise = (articleUrl && FIRECRAWL_KEY)
+    ? fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
+        body: JSON.stringify({ url: articleUrl.startsWith('http') ? articleUrl : 'https://' + articleUrl, formats: ['markdown'] }),
+        signal: AbortSignal.timeout(4000),
+      }).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
+
+  log('og+SERP+article start');
+  const [_, articleResults, newsResults, articleScrapeData] = await Promise.all([
     ogPromise,
-    serpSearch('site:' + domain + ' (blog OR article OR insight OR guide OR resource)'),
-    serpSearch(domain + ' news announcement 2025'),
+    serpSearch(domain + ' blog articles insights 2025'),
+    serpSearch(domain + ' news press release announcement 2025'),
+    articleScrapePromise,
   ]);
 
   serpArticles = articleResults.slice(0,6);
@@ -161,31 +172,22 @@ exports.handler = async (event) => {
     console.log('Deep mode site images:', siteImages.length);
   }
 
-  // ── STEP 2: Article URL — scrape + send to Jasper as document ──
+  // ── STEP 2: Article URL — process already-scraped data + send to Jasper ──
   let featuredArticle = null;
   if (articleUrl) {
-    log('article scrape start: ' + articleUrl);
+    log('article processing start');
     try {
       let articleContent = '', articleImage = '', articleTitle = '', articleDesc = '';
       const articleClean = articleUrl.startsWith('http') ? articleUrl : 'https://' + articleUrl;
 
-      // Firecrawl scrape for full content
-      if (FIRECRAWL_KEY) {
-        const fcArticle = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
-          body: JSON.stringify({ url: articleClean, formats: ['markdown'] }),
-          signal: AbortSignal.timeout(5000),
-        }).then(r => r.ok ? r.json() : null).catch(() => null);
-
-        if (fcArticle) {
-          articleContent = String(fcArticle.data?.markdown || '').slice(0, 8000);
-          const meta = fcArticle.data?.metadata || {};
-          articleImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
-          articleTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
-          articleDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
-          log('firecrawl article: title=' + articleTitle.slice(0,40) + ' image=' + (articleImage?'yes':'no') + ' content=' + articleContent.length + 'chars');
-        }
+      // Use already-scraped data from parallel fetch
+      if (articleScrapeData) {
+        articleContent = String(articleScrapeData.data?.markdown || '').slice(0, 8000);
+        const meta = articleScrapeData.data?.metadata || {};
+        articleImage = String(meta.ogImage || meta['og:image'] || '').replace(/&amp;/g, '&');
+        articleTitle = String(meta.ogTitle || meta['og:title'] || meta.title || '');
+        articleDesc = String(meta.ogDescription || meta['og:description'] || meta.description || '');
+        log('article scraped: title=' + articleTitle.slice(0,40) + ' image=' + (articleImage?'yes':'no') + ' content=' + articleContent.length + 'chars');
       }
 
       // Fallback: plain og scrape
@@ -229,12 +231,10 @@ exports.handler = async (event) => {
         } catch(e) { log('DALL-E error: ' + e.message); }
       }
 
-      // Create Jasper document
+      // Create Jasper document — run in parallel with GPT, don't await yet
       let jasperDocId = null, jasperDocUrl = null;
-      if (JASPER_KEY && jasperUserId && (articleContent || articleDesc || articleTitle)) {
-        log('creating Jasper doc userId=' + jasperUserId);
-        try {
-          const jasperRes = await fetch('https://api.jasper.ai/v1/documents', {
+      const jasperDocPromise = (JASPER_KEY && jasperUserId && (articleContent || articleDesc || articleTitle))
+        ? (log('creating Jasper doc'), fetch('https://api.jasper.ai/v1/documents', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': JASPER_KEY },
             body: JSON.stringify({
@@ -243,18 +243,17 @@ exports.handler = async (event) => {
               content: articleContent || articleDesc || articleTitle,
               status: 'DRAFT',
             }),
-            signal: AbortSignal.timeout(8000),
-          });
-          const jasperTxt = await jasperRes.text();
-          log('Jasper doc response: ' + jasperRes.status + ' ' + jasperTxt.slice(0, 200));
-          if (jasperRes.ok) {
-            const jasperData = JSON.parse(jasperTxt);
-            jasperDocId = jasperData.data?.id || jasperData.id || null;
-            if (jasperDocId) jasperDocUrl = 'https://app.jasper.ai/documents/' + jasperDocId;
-            log('Jasper doc created: ' + jasperDocId);
-          }
-        } catch(e) { log('Jasper doc error: ' + e.message); }
-      }
+            signal: AbortSignal.timeout(10000),
+          }).then(async r => {
+            const txt = await r.text();
+            log('Jasper doc response: ' + r.status + ' ' + txt.slice(0,100));
+            if (r.ok) {
+              const d = JSON.parse(txt);
+              return d.data?.id || d.id || null;
+            }
+            return null;
+          }).catch(e => { log('Jasper doc error: ' + e.message); return null; }))
+        : Promise.resolve(null);
 
       featuredArticle = {
         id: 'featured-0',
@@ -325,6 +324,16 @@ exports.handler = async (event) => {
 
     const brand = JSON.parse((await gptRes.json()).choices[0].message.content);
     log('GPT done brand=' + (brand.companyName||'?'));
+    // Now await Jasper doc (was running in parallel with GPT)
+    if (featuredArticle) {
+      jasperDocId = await jasperDocPromise;
+      if (jasperDocId) {
+        jasperDocUrl = 'https://app.jasper.ai/documents/' + jasperDocId;
+        featuredArticle.jasperDocId = jasperDocId;
+        featuredArticle.jasperDocUrl = jasperDocUrl;
+        log('Jasper doc ready: ' + jasperDocId);
+      }
+    }
     if(ogImage) brand.heroImageUrl = ogImage;
 
     const companyName = String(brand.companyName || domain);
