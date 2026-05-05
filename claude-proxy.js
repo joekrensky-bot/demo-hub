@@ -15,10 +15,19 @@ exports.handler = async (event) => {
 
   if (!OPENAI_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY not set' }) };
 
-  let url = '';
+  // Timing + debug logging
+  const T = Date.now();
+  const logs = [];
+  const log = (msg) => { const e = '[' + (Date.now()-T) + 'ms] ' + msg; console.log(e); logs.push(e); };
+
+  let url = '', manual = false, mode = 'fast', articleUrl = '', jasperUserId = 'hTcTOK3m6xUCKwznLDLXwem3Y9E2';
   try {
     const parsed = JSON.parse(event.body || '{}');
     url = String(parsed.url || '');
+    manual = Boolean(parsed.manual);
+    mode = String(parsed.mode || 'fast');
+    articleUrl = String(parsed.articleUrl || '');
+    jasperUserId = String(parsed.jasperUserId || 'hTcTOK3m6xUCKwznLDLXwem3Y9E2');
   } catch(e) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
@@ -27,6 +36,7 @@ exports.handler = async (event) => {
 
   const clean = url.startsWith('http') ? url : 'https://' + url;
   const domain = clean.replace(/https?:\/\//, '').split('/')[0];
+  log('START mode=' + mode + ' url=' + domain + ' articleUrl=' + (articleUrl||'none'));
 
   const FALLBACK_IMAGES = {
     security:   'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
@@ -292,7 +302,6 @@ exports.handler = async (event) => {
 
   try {
     log('GPT start');
-    log('GPT start');
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENAI_KEY},
@@ -314,7 +323,6 @@ exports.handler = async (event) => {
 
     const brand = JSON.parse((await gptRes.json()).choices[0].message.content);
     log('GPT done brand=' + (brand.companyName||'?'));
-    log('GPT done');
     if(ogImage) brand.heroImageUrl = ogImage;
 
     const companyName = String(brand.companyName || domain);
