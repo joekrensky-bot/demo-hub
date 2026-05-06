@@ -1,39 +1,33 @@
 exports.handler = async (event) => {
-  const headers = {
+  const H = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
   };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: H, body: '' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: H, body: 'Method Not Allowed' };
 
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method Not Allowed' };
+  const OK = process.env.OPENAI_API_KEY;
+  const FK = process.env.FIRECRAWL_API_KEY;
+  const JK = process.env.JASPER_API_KEY;
+  if (!OK) return { statusCode: 500, headers: H, body: JSON.stringify({ error: 'No OPENAI key' }) };
 
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  const FIRECRAWL_KEY = process.env.FIRECRAWL_API_KEY;
-  const JASPER_KEY = process.env.JASPER_API_KEY;
-  if (!OPENAI_KEY) return { statusCode: 500, headers, body: JSON.stringify({ error: 'OPENAI_API_KEY not set' }) };
+  const T = Date.now(), L = [], log = m => { const e = `[${Date.now()-T}ms] ${m}`; console.log(e); L.push(e); };
 
-  const T = Date.now();
-  const logs = [];
-  const log = (msg) => { const e = '[' + (Date.now()-T) + 'ms] ' + msg; console.log(e); logs.push(e); };
-
-  let url = '', articleUrl = '', jasperUserId = 'hTcTOK3m6xUCKwznLDLXwem3Y9E2';
+  let url='', articleUrl='', jasperUserId='hTcTOK3m6xUCKwznLDLXwem3Y9E2';
   try {
-    const p = JSON.parse(event.body || '{}');
-    url = String(p.url || '');
-    articleUrl = String(p.articleUrl || '');
-    jasperUserId = String(p.jasperUserId || jasperUserId);
-  } catch(e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Bad JSON' }) }; }
+    const p = JSON.parse(event.body||'{}');
+    url = String(p.url||''); articleUrl = String(p.articleUrl||'');
+    jasperUserId = String(p.jasperUserId||jasperUserId);
+  } catch(e) { return { statusCode:400, headers:H, body:JSON.stringify({error:'Bad JSON'}) }; }
+  if (!url) return { statusCode:400, headers:H, body:JSON.stringify({error:'url required'}) };
 
-  if (!url) return { statusCode: 400, headers, body: JSON.stringify({ error: 'url required' }) };
+  const clean = url.startsWith('http') ? url : 'https://'+url;
+  const domain = clean.replace(/https?:\/\//,'').split('/')[0];
+  log('START '+domain+' art='+(articleUrl||'none'));
 
-  const clean = url.startsWith('http') ? url : 'https://' + url;
-  const domain = clean.replace(/https?:\/\//, '').split('/')[0];
-  log('START url=' + domain + ' articleUrl=' + (articleUrl||'none'));
-
-  // ── Fallback images ──
   const IMGS = [
     'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
     'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
@@ -49,236 +43,172 @@ exports.handler = async (event) => {
     'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80',
   ];
 
-  // ── Helper: scrape og tags from a URL ──
-  const scrapeOg = async (u, timeout=3000) => {
+  // ── Helper: og scrape ──
+  const ogScrape = async (u, ms=2500) => {
     try {
-      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(timeout), redirect: 'follow' });
+      const r = await fetch(u, {headers:{'User-Agent':'Mozilla/5.0'},signal:AbortSignal.timeout(ms),redirect:'follow'});
       if (!r.ok) return {};
       const h = await r.text();
-      const g = (pats) => { for (const p of pats) { const m = h.match(p); if (m) return m[1].trim().replace(/&amp;/g,'&'); } return ''; };
+      const g = ps => { for (const p of ps) { const m=h.match(p); if(m) return m[1].trim().replace(/&amp;/g,'&'); } return ''; };
       return {
-        title: g([/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i, /<title[^>]*>([^<]+)<\/title>/i]),
-        desc: g([/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i]),
-        image: g([/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i, /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)/i]),
+        title: g([/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i,/<title[^>]*>([^<]+)<\/title>/i]),
+        desc: g([/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i,/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i]),
+        image: g([/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i,/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)/i]),
       };
     } catch(e) { return {}; }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 1: All parallel — og, site map, article scrape (max 4s)
-  // ═══════════════════════════════════════════════════════════════
-  log('phase1 start');
+  // ═══ PHASE 1: og + map + article scrape — all parallel, 3s max ═══
+  log('P1 start');
 
-  // 1a. Homepage og tags
-  const ogP = scrapeOg(clean, 3000);
+  const ogP = ogScrape(clean, 2500);
 
-  // 1b. Firecrawl /map — get all blog/news URLs from the site
-  const mapP = FIRECRAWL_KEY ? fetch('https://api.firecrawl.dev/v1/map', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
-    body: JSON.stringify({ url: clean, limit: 50 }),
-    signal: AbortSignal.timeout(4000),
-  }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null);
+  const mapP = FK ? fetch('https://api.firecrawl.dev/v1/map', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+FK},
+    body: JSON.stringify({url:clean, limit:30}),
+    signal: AbortSignal.timeout(3000),
+  }).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
 
-  // 1c. Article URL scrape (if provided)
-  const articleScrapeP = (articleUrl && FIRECRAWL_KEY) ? fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + FIRECRAWL_KEY },
-    body: JSON.stringify({ url: articleUrl.startsWith('http') ? articleUrl : 'https://'+articleUrl, formats: ['markdown'] }),
-    signal: AbortSignal.timeout(4000),
-  }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null);
+  const artP = (articleUrl && FK) ? fetch('https://api.firecrawl.dev/v1/scrape', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+FK},
+    body: JSON.stringify({url: articleUrl.startsWith('http')?articleUrl:'https://'+articleUrl, formats:['markdown']}),
+    signal: AbortSignal.timeout(3000),
+  }).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
 
-  const [og, mapData, artScrape] = await Promise.all([ogP, mapP, articleScrapeP]);
+  const [og, map, artData] = await Promise.all([ogP, mapP, artP]);
 
-  // Extract blog/news URLs from map
+  // Extract blog URLs from map
   let blogUrls = [];
-  if (mapData && mapData.links) {
-    blogUrls = mapData.links.filter(u =>
-      /\/(blog|news|article|insight|resource|press|story|hello|post|update)\//i.test(u)
-    );
-    log('map found ' + mapData.links.length + ' total, ' + blogUrls.length + ' blog/news');
+  if (map?.links) {
+    blogUrls = map.links.filter(u =>
+      /\/(blog|news|article|insight|resource|press|hello|post|update|story)\//i.test(u)
+    ).slice(0, 6);
+  }
+  log('P1 done og='+(og.title?'yes':'no')+' map='+(map?.links?.length||0)+' blogs='+blogUrls.length);
+
+  // ═══ PHASE 2: Scrape og from blog URLs — parallel, 2s max ═══
+  let realArticles = [];
+  if (blogUrls.length > 0) {
+    log('P2 scraping '+blogUrls.length+' pages');
+    const ogs = await Promise.all(blogUrls.map(u => ogScrape(u, 2000)));
+    realArticles = blogUrls.map((u,i) => ({
+      title: ogs[i].title || u.split('/').filter(Boolean).pop().replace(/[-_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),
+      summary: ogs[i].desc || '',
+      image: ogs[i].image || '',
+      url: u,
+    }));
+    log('P2 done '+realArticles.filter(a=>a.image).length+' have images');
   } else {
-    log('map returned nothing');
+    log('P2 skip — no blog URLs');
   }
 
-  // Build real article list from URLs — extract titles from URL slugs
-  const realArticles = blogUrls.slice(0, 8).map(u => {
-    const slug = u.split('/').filter(Boolean).pop() || '';
-    const title = slug.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    return { title, summary: '', slug, url: u, date: '2025-05-05' };
-  });
-
-  log('phase1 done | ogTitle=' + (og.title||'none').slice(0,30) + ' ogImage=' + (og.image?'yes':'no') + ' realArticles=' + realArticles.length);
-
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 2: Scrape og tags from top 6 blog URLs for real titles+images (parallel, 3s)
-  // ═══════════════════════════════════════════════════════════════
-  log('phase2 start — scraping ' + Math.min(realArticles.length, 6) + ' article pages');
-  const articleOgs = await Promise.all(
-    realArticles.slice(0, 6).map(a => scrapeOg(a.url, 3000))
-  );
-  for (let i = 0; i < Math.min(articleOgs.length, realArticles.length); i++) {
-    if (articleOgs[i].title) realArticles[i].title = articleOgs[i].title;
-    if (articleOgs[i].desc) realArticles[i].summary = articleOgs[i].desc;
-    if (articleOgs[i].image) realArticles[i].image = articleOgs[i].image;
-  }
-  const withImages = realArticles.filter(a => a.image).length;
-  log('phase2 done | titles scraped, ' + withImages + ' have real images');
-
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 3: Process featured article (from article URL)
-  // ═══════════════════════════════════════════════════════════════
-  let featuredArticle = null;
+  // ═══ PHASE 3: Featured article + Jasper doc (fire-and-forget) ═══
+  let feat = null;
+  let jasperP = Promise.resolve(null);
   if (articleUrl) {
-    const articleClean = articleUrl.startsWith('http') ? articleUrl : 'https://'+articleUrl;
-    let aTitle='', aDesc='', aImage='', aContent='';
-
-    if (artScrape) {
-      const meta = artScrape.data?.metadata || {};
-      aTitle = String(meta.ogTitle||meta['og:title']||meta.title||'');
-      aDesc = String(meta.ogDescription||meta['og:description']||meta.description||'');
-      aImage = String(meta.ogImage||meta['og:image']||'').replace(/&amp;/g,'&');
-      aContent = String(artScrape.data?.markdown||'').slice(0,6000);
+    const ac = articleUrl.startsWith('http')?articleUrl:'https://'+articleUrl;
+    let aT='',aD='',aI='',aC='';
+    if (artData) {
+      const m = artData.data?.metadata||{};
+      aT=String(m.ogTitle||m['og:title']||m.title||'');
+      aD=String(m.ogDescription||m['og:description']||m.description||'');
+      aI=String(m.ogImage||m['og:image']||'').replace(/&amp;/g,'&');
+      aC=String(artData.data?.markdown||'').slice(0,6000);
     }
-    if (!aTitle) {
-      const aOg = await scrapeOg(articleClean, 2000);
-      aTitle = aOg.title || ''; aDesc = aOg.desc || ''; aImage = aOg.image || '';
+    if (!aT) { const o=await ogScrape(ac,1500); aT=o.title||''; aD=o.desc||''; aI=o.image||''; }
+    log('art: "'+aT.slice(0,40)+'" img='+(aI?'yes':'no')+' body='+aC.length);
+
+    if (JK && (aC||aD||aT)) {
+      jasperP = fetch('https://api.jasper.ai/v1/documents', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-API-Key':JK.split(':')[0]},
+        body:JSON.stringify({userId:jasperUserId,name:aT||'Featured',content:aC||aD||aT,status:'DRAFT'}),
+        signal:AbortSignal.timeout(8000),
+      }).then(async r=>{const t=await r.text();log('Jasper:'+r.status+' '+t.slice(0,60));if(r.ok){const d=JSON.parse(t);return d.data?.id||d.id||null;}return null;})
+      .catch(e=>{log('Jasper err:'+e.message);return null;});
     }
-    log('article: title="' + aTitle.slice(0,50) + '" image=' + (aImage?'yes':'no') + ' content=' + aContent.length + 'ch');
 
-    // Jasper doc creation (fire and forget — don't block GPT)
-    let jasperDocId = null, jasperDocUrl = null;
-    const jasperP = (JASPER_KEY && (aContent||aDesc||aTitle)) ?
-      fetch('https://api.jasper.ai/v1/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': JASPER_KEY.split(':')[0] },
-        body: JSON.stringify({ userId: jasperUserId, name: aTitle||'Featured Article', content: aContent||aDesc||aTitle, status: 'DRAFT' }),
-        signal: AbortSignal.timeout(8000),
-      }).then(async r => {
-        const t = await r.text(); log('Jasper: ' + r.status + ' ' + t.slice(0,80));
-        if (r.ok) { const d = JSON.parse(t); return d.data?.id || d.id || null; }
-        return null;
-      }).catch(e => { log('Jasper err: '+e.message); return null; })
-    : Promise.resolve(null);
-
-    featuredArticle = {
-      id: 'featured-0', title: aTitle||'Featured Article',
-      summary: aDesc||'Featured article for Jasper optimization.',
-      imageUrl: aImage || IMGS[0],
-      imageSource: aImage ? 'firecrawl' : 'fallback',
-      slug: (aTitle||'featured').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),
-      category: 'Featured', readTime: '5 min read', date: new Date().toISOString().slice(0,10),
-      body: aContent ? '<p>'+aContent.slice(0,4000).replace(/\n\n+/g,'</p><p>').replace(/\n/g,' ')+'</p>' : '<p>'+(aDesc||aTitle)+'</p>',
-      source: 'jasper-doc', isNew: true, jasperDocId: null, jasperDocUrl: null, articleSourceUrl: articleClean,
-      _jasperP: jasperP, // resolve after GPT
+    feat = {
+      id:'featured-0', title:aT||'Featured Article', summary:aD||'Featured article.',
+      imageUrl:aI||IMGS[0], imageSource:aI?'firecrawl':'fallback',
+      slug:(aT||'featured').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),
+      category:'Featured', readTime:'5 min read', date:new Date().toISOString().slice(0,10),
+      body:aC?'<p>'+aC.slice(0,4000).replace(/\n\n+/g,'</p><p>').replace(/\n/g,' ')+'</p>':'<p>'+(aD||aT)+'</p>',
+      source:'jasper-doc', isNew:true, jasperDocId:null, jasperDocUrl:null, articleSourceUrl:ac,
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 4: GPT — brand colors + expand article summaries
-  // ═══════════════════════════════════════════════════════════════
-  const realArtsText = realArticles.length > 0
-    ? 'REAL CONTENT FROM ' + domain.toUpperCase() + ' (use these exact titles as articles):\n' +
-      realArticles.slice(0,6).map((a,i) => (i+1)+'. "'+a.title+'"' + (a.summary ? ' — '+a.summary.slice(0,120) : '')).join('\n')
-    : 'No real articles found. Generate 6 articles specific to ' + domain + ' and their products.';
+  // ═══ PHASE 4: GPT — short prompt, fast response ═══
+  const artsForGPT = realArticles.length > 0
+    ? 'REAL articles from '+domain+':\n'+realArticles.map((a,i)=>(i+1)+'. "'+a.title+'"'+(a.summary?' — '+a.summary.slice(0,80):'')).join('\n')
+    : '';
 
-  const prompt = 'Build content hub JSON for ' + domain + '.\n\n' + realArtsText + '\n\n' +
-    'Homepage: title="' + (og.title||'') + '" desc="' + (og.desc||'') + '"\n\n' +
-    'Return ONLY JSON:\n' +
-    '{"companyName":"","brandPrimary":"#hex nav bg","brandAccent":"#hex CTA","brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#fff",' +
-    '"heroHeadline":"use og:title exactly","heroSubheading":"use og:desc exactly",' +
-    '"articles":[{"title":"REAL title","summary":"2 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-05","body":"<p>para</p><h2>h</h2><p>para</p><blockquote><p>insight</p></blockquote><p>close</p>"}],' +
-    '"news":[{"title":"","summary":"1 sentence","slug":"","category":"News","readTime":"2 min","date":"2025-05","body":"<p>para</p>"}],' +
-    '"aboutText":"2 paragraphs","products":[{"name":"","description":"","cta":"Learn more"}]}' +
-    '\n6 articles + 6 news. Real titles first, fill rest. Slugs lowercase-hyphenated.';
+  const prompt = 'Content hub JSON for '+domain+'.\n\n'+
+    (artsForGPT||'Generate 6 articles for '+domain+'.')+'\n\n'+
+    'og:title="'+(og.title||'')+'"\nog:desc="'+(og.desc||'')+'"\n\n'+
+    'JSON only: {"companyName":"","brandPrimary":"#hex","brandAccent":"#hex","brandBg":"#f9f7f4","brandText":"#1a1a2e","brandHeaderText":"#fff",'+
+    '"heroHeadline":"og:title exact","heroSubheading":"og:desc exact",'+
+    '"articles":[{"title":"","summary":"1-2 sentences","slug":"","category":"","readTime":"5 min read","date":"2025-05","body":"<p>p</p><h2>h</h2><p>p</p><blockquote><p>q</p></blockquote><p>p</p>"}],'+
+    '"news":[{"title":"","summary":"","slug":"","category":"News","readTime":"2 min","date":"2025-05","body":"<p>p</p>"}],'+
+    '"aboutText":"","products":[{"name":"","description":"","cta":"Learn more"}]}'+
+    '\n6 articles+6 news. Real titles first. Slugs lowercase-hyphen.';
 
   try {
-    log('GPT start');
+    log('GPT start ('+prompt.length+' chars)');
     const gr = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OPENAI_KEY },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', max_tokens: 2000,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Return valid JSON only.' },
-          { role: 'user', content: prompt },
-        ],
-      }),
-      signal: AbortSignal.timeout(20000),
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+OK},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:1500,response_format:{type:'json_object'},
+        messages:[{role:'system',content:'JSON only. Be concise.'},{role:'user',content:prompt}]}),
+      signal:AbortSignal.timeout(8000),
     });
-
     if (!gr.ok) {
-      const e = await gr.text();
-      return { statusCode: gr.status, headers, body: JSON.stringify({ error: 'GPT ' + gr.status, detail: e, _debug: logs }) };
+      const e=await gr.text();
+      return {statusCode:gr.status,headers:H,body:JSON.stringify({error:'GPT '+gr.status,detail:e.slice(0,200),_debug:L})};
+    }
+    const raw = await gr.json();
+    const brand = JSON.parse(raw.choices[0].message.content);
+    log('GPT done '+raw.usage?.total_tokens+'tok brand='+(brand.companyName||'?'));
+
+    // Resolve Jasper
+    if (feat) {
+      const docId = await jasperP;
+      if (docId) { feat.jasperDocId=docId; feat.jasperDocUrl='https://app.jasper.ai/documents/'+docId; log('Jasper doc:'+docId); }
     }
 
-    const brand = JSON.parse((await gr.json()).choices[0].message.content);
-    log('GPT done brand=' + (brand.companyName||'?'));
+    const co = String(brand.companyName||domain);
+    let arts = brand.articles||[], nws = brand.news||[];
+    const ph = (t,i) => ({title:t==='n'?'Update '+(i+1):'Article '+(i+1),summary:'From '+co+'.',slug:t+'-'+i,category:t==='n'?'News':'Insights',readTime:t==='n'?'2 min':'5 min read',date:'2025-05-05',body:'<p>Coming soon.</p>'});
+    while(arts.length<6)arts.push(ph('a',arts.length));
+    while(nws.length<6)nws.push(ph('n',nws.length));
+    if(feat)arts=[feat,...arts.slice(0,5)];
 
-    // Resolve Jasper doc if we started one
-    if (featuredArticle && featuredArticle._jasperP) {
-      const docId = await featuredArticle._jasperP;
-      if (docId) {
-        featuredArticle.jasperDocId = docId;
-        featuredArticle.jasperDocUrl = 'https://app.jasper.ai/documents/' + docId;
-        log('Jasper doc ready: ' + docId);
-      }
-      delete featuredArticle._jasperP;
-    }
-
-    // Merge
-    const company = String(brand.companyName || domain);
-    let articles = brand.articles || [];
-    let news = brand.news || [];
-
-    // Fill gaps
-    const ph = (type, i) => ({ title: type==='news' ? 'Company Update '+(i+1) : 'Article '+(i+1),
-      summary: 'Latest from '+company+'.', slug: type+'-'+i, category: type==='news'?'News':'Insights',
-      readTime: type==='news'?'2 min':'5 min read', date: '2025-05-05', body: '<p>Coming soon.</p>' });
-    while (articles.length < 6) articles.push(ph('article', articles.length));
-    while (news.length < 6) news.push(ph('news', news.length));
-
-    // Insert featured at position 0
-    if (featuredArticle) articles = [featuredArticle, ...articles.slice(0,5)];
-
-    // Assign images: real scraped image → fallback rotation
-    const mapItem = (a, i, type) => ({
-      id: type+'-'+i,
-      title: String(a.title||type+' '+(i+1)),
-      summary: String(a.summary||''),
-      imageUrl: a.imageUrl || (realArticles[i] && realArticles[i].image) || IMGS[i % IMGS.length],
-      imageSource: a.imageUrl ? (a.imageSource||'firecrawl') : (realArticles[i]?.image ? 'firecrawl' : 'fallback'),
-      slug: String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||type+'-'+i),
-      category: String(a.category||(type==='news'?'News':'Insights')),
-      readTime: String(a.readTime||'5 min read'),
-      date: String(a.date||'2025-05-05'),
-      body: String(a.body||''),
-      source: a.source||'scraped', isNew: a.isNew||false,
-      jasperDocId: a.jasperDocId||null, jasperDocUrl: a.jasperDocUrl||null,
+    const mi = (a,i,t) => ({
+      id:t+'-'+i, title:String(a.title||t+' '+(i+1)), summary:String(a.summary||''),
+      imageUrl: a.imageUrl || (realArticles[i]?.image) || IMGS[i%IMGS.length],
+      imageSource: a.imageUrl?(a.imageSource||'firecrawl'):(realArticles[i]?.image?'firecrawl':'fallback'),
+      slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
+      category:String(a.category||(t==='news'?'News':'Insights')),
+      readTime:String(a.readTime||'5 min read'), date:String(a.date||'2025-05-05'),
+      body:String(a.body||''), source:a.source||'scraped', isNew:a.isNew||false,
+      jasperDocId:a.jasperDocId||null, jasperDocUrl:a.jasperDocUrl||null,
     });
 
-    log('DONE total=' + (Date.now()-T) + 'ms');
-    return {
-      statusCode: 200, headers,
-      body: JSON.stringify({
-        _debug: logs, companyName: company,
-        brandPrimary: String(brand.brandPrimary||'#0f172a'),
-        brandAccent: String(brand.brandAccent||'#6366f1'),
-        brandBg: '#f9f7f4', brandText: '#1a1a2e',
-        brandHeaderText: String(brand.brandHeaderText||'#fff'),
-        logoUrl: 'https://logo.clearbit.com/' + domain,
-        heroHeadline: String(brand.heroHeadline || og.title || 'Insights & Resources'),
-        heroSubheading: String(brand.heroSubheading || og.desc || ''),
-        heroImageUrl: String(og.image || ''),
-        articles: articles.slice(0,6).map((a,i) => mapItem(a,i,'article')),
-        news: news.slice(0,6).map((a,i) => mapItem(a,i,'news')),
-        aboutText: String(brand.aboutText||''),
-        products: brand.products||[],
-        featuredArticle: featuredArticle ? { jasperDocId: featuredArticle.jasperDocId, jasperDocUrl: featuredArticle.jasperDocUrl, title: featuredArticle.title } : null,
-      }),
-    };
+    log('DONE '+((Date.now()-T)/1000).toFixed(1)+'s');
+    return {statusCode:200,headers:H,body:JSON.stringify({
+      _debug:L, companyName:co,
+      brandPrimary:String(brand.brandPrimary||'#0f172a'), brandAccent:String(brand.brandAccent||'#6366f1'),
+      brandBg:'#f9f7f4', brandText:'#1a1a2e', brandHeaderText:String(brand.brandHeaderText||'#fff'),
+      logoUrl:'https://logo.clearbit.com/'+domain,
+      heroHeadline:String(brand.heroHeadline||og.title||'Insights & Resources'),
+      heroSubheading:String(brand.heroSubheading||og.desc||''),
+      heroImageUrl:String(og.image||''),
+      articles:arts.slice(0,6).map((a,i)=>mi(a,i,'article')),
+      news:nws.slice(0,6).map((a,i)=>mi(a,i,'news')),
+      aboutText:String(brand.aboutText||''), products:brand.products||[],
+      featuredArticle:feat?{jasperDocId:feat.jasperDocId,jasperDocUrl:feat.jasperDocUrl,title:feat.title}:null,
+    })};
   } catch(err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: String(err.message), _debug: logs }) };
+    return {statusCode:500,headers:H,body:JSON.stringify({error:String(err.message),_debug:L})};
   }
 };
