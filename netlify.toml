@@ -1,11 +1,7 @@
 [functions]
-  node_bundler = "esbuild"
- 
-[functions."claude-proxy"]
   timeout = 26
- 
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
- 
