@@ -16,13 +16,92 @@ exports.handler = async (event) => {
 
   const T = Date.now(), L = [], log = m => { const e = `[${Date.now()-T}ms] ${m}`; console.log(e); L.push(e); };
 
-  let url='', articleUrl='', jasperUserId='hTcTOK3m6xUCKwznLDLXwem3Y9E2';
+  let url='', articleUrl='', jasperUserId='hTcTOK3m6xUCKwznLDLXwem3Y9E2', manual=false;
   try {
     const p = JSON.parse(event.body||'{}');
     url = String(p.url||''); articleUrl = String(p.articleUrl||'');
     jasperUserId = String(p.jasperUserId||jasperUserId);
+    manual = Boolean(p.manual);
   } catch(e) { return { statusCode:400, headers:H, body:JSON.stringify({error:'Bad JSON'}) }; }
   if (!url) return { statusCode:400, headers:H, body:JSON.stringify({error:'url required'}) };
+
+  // ═══ MANUAL MODE: Jasper Command API generates content ═══
+  if (manual) {
+    log('MANUAL mode for: ' + url);
+
+    const jasperCmd = async (command) => {
+      if (!JK) return '';
+      try {
+        const r = await fetch('https://api.jasper.ai/v1/command', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':JK},
+          body:JSON.stringify({inputs:{command}}),
+          signal:AbortSignal.timeout(8000),
+        });
+        if (!r.ok) { log('Jasper cmd fail: '+r.status); return ''; }
+        const d = await r.json();
+        return String(d.data?.[0]?.text||'').trim();
+      } catch(e) { log('Jasper cmd err: '+e.message); return ''; }
+    };
+
+    try {
+      // Generate articles and news in parallel via Jasper
+      log('Jasper generating content...');
+      const [articlesRaw, newsRaw, aboutRaw] = await Promise.all([
+        jasperCmd('Write 6 blog article titles and 2-sentence summaries for a content hub demo for '+url+'. Format as JSON array: [{"title":"","summary":"","category":"one of Marketing,AI,Strategy,Growth,Content,Technology","slug":"lowercase-hyphen"}]. Return ONLY the JSON array.'),
+        jasperCmd('Write 6 news headlines and 1-sentence summaries for '+url+'. Format as JSON array: [{"title":"","summary":"","slug":"lowercase-hyphen"}]. Return ONLY the JSON array.'),
+        jasperCmd('Write a 2-paragraph about section for '+url+' content hub. Professional tone.'),
+      ]);
+
+      const parseArr = (raw) => { try { const m=raw.match(/\[[\s\S]*\]/); return m?JSON.parse(m[0]):[]; } catch(e){return [];} };
+      let arts = parseArr(articlesRaw);
+      let nws = parseArr(newsRaw);
+      log('Jasper done: '+arts.length+' articles, '+nws.length+' news');
+
+      // Fill gaps with placeholders
+      const co = url.replace(/https?:\/\//,'').split('/')[0];
+      const ph=(t,i)=>({title:t==='n'?'Company Update '+(i+1):'Article '+(i+1),summary:'Latest from '+co+'.',slug:t+'-'+i,category:t==='n'?'News':'Insights'});
+      while(arts.length<6)arts.push(ph('a',arts.length));
+      while(nws.length<6)nws.push(ph('n',nws.length));
+
+      // Use GPT just for brand colors (tiny fast call)
+      let brandPrimary='#0f172a', brandAccent='#6366f1', brandHeaderText='#fff';
+      try {
+        const gr = await fetch('https://api.openai.com/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+OK},
+          body:JSON.stringify({model:'gpt-4o-mini',max_tokens:100,response_format:{type:'json_object'},
+            messages:[{role:'system',content:'JSON only'},{role:'user',content:'Return brand colors for "'+co+'": {"brandPrimary":"#hex nav","brandAccent":"#hex cta","brandHeaderText":"#fff or #000","heroHeadline":"tagline","heroSubheading":"1 sentence"}'}]}),
+          signal:AbortSignal.timeout(4000),
+        });
+        if (gr.ok) {
+          const b=JSON.parse((await gr.json()).choices[0].message.content);
+          brandPrimary=b.brandPrimary||brandPrimary; brandAccent=b.brandAccent||brandAccent;
+          brandHeaderText=b.brandHeaderText||brandHeaderText;
+          log('GPT brand colors done');
+        }
+      } catch(e) { log('GPT brand err: '+e.message); }
+
+      const mi=(a,i,t)=>({id:t+'-'+i,title:String(a.title||t+' '+(i+1)),summary:String(a.summary||''),
+        imageUrl:IMGS[i%IMGS.length],imageSource:'fallback',
+        slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
+        category:String(a.category||(t==='news'?'News':'Insights')),readTime:t==='news'?'2 min':'5 min read',
+        date:'2025-05-05',body:'<p>'+(a.summary||'Coming soon.')+'</p>',
+        source:'jasper',isNew:false,jasperDocId:null,jasperDocUrl:null});
+
+      log('DONE '+((Date.now()-T)/1000).toFixed(1)+'s');
+      return {statusCode:200,headers:H,body:JSON.stringify({
+        _debug:L,companyName:co,
+        brandPrimary,brandAccent,brandBg:'#f9f7f4',brandText:'#1a1a2e',brandHeaderText,
+        logoUrl:'',heroHeadline:'Insights & Resources',heroSubheading:'Expert thinking to help your team move faster.',heroImageUrl:'',
+        articles:arts.slice(0,6).map((a,i)=>mi(a,i,'article')),
+        news:nws.slice(0,6).map((a,i)=>mi(a,i,'news')),
+        aboutText:String(aboutRaw||'A modern content hub.'),products:[],featuredArticle:null,
+      })};
+    } catch(err) {
+      return {statusCode:500,headers:H,body:JSON.stringify({error:String(err.message),_debug:L})};
+    }
+  }
 
   const clean = url.startsWith('http') ? url : 'https://'+url;
   const domain = clean.replace(/https?:\/\//,'').split('/')[0];
