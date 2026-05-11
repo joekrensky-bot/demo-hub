@@ -566,7 +566,7 @@ function SetupPage(){
             <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
               <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>https://</span>
               <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!showManual&&handleAnalyze()}
-                placeholder="arcticwolf.com" disabled={loading}
+                placeholder="jasper.ai" disabled={loading}
                 style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
             </div>
           </div>
@@ -581,7 +581,7 @@ function SetupPage(){
             <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff',position:'relative'}}>
               <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>✦</span>
               <input value={articleUrl} onChange={e=>setArticleUrl(e.target.value)}
-                placeholder="arcticwolf.com/blog/my-article" disabled={loading}
+                placeholder="jasper.ai/blog/my-article" disabled={loading}
                 style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
             </div>
             <p style={{fontSize:11,color:'#94a3b8',marginTop:4,lineHeight:1.5}}>This article gets scraped, sent to Jasper as a document, and appears as the featured #1 card in the hub. Edit it in Jasper and publish to update the hub live.</p>
