@@ -5,6 +5,3 @@
 
 [functions]
   directory = "netlify/functions"
-
-[[functions."claude-proxy"]]
-  timeout = 26
