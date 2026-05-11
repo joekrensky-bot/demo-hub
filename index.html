@@ -1141,9 +1141,6 @@ function ValidatePage(){
   const [tab,setTab]=useState('brand');
   const set=key=>val=>setLocal(p=>({...p,[key]:val}));
 
-  const [pushing,setPushing]=useState(false);
-  const [pushStatus,setPushStatus]=useState(''); // '', 'pushing', 'done', 'error'
-
   // ── Pure hub generation — no Jasper push ──
   const handleGenerate=()=>{
     updateConfig({...local,generated:true});
