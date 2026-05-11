@@ -34,7 +34,7 @@ const {useState, useEffect, useContext, createContext, useRef, useCallback} = Re
 /* ─── CONSTANTS ─── */
 const JASPER_LOGO_LIGHT = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb2e0705768b531d051_jasper-wordmark-light.svg';
 const JASPER_LOGO_FLAME = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb209057029cc921078_jasper-wordmark-flame.svg';
-const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'; // clean modern office/corporate
+const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1749371930388-50c782b0acea?auto=format&fit=crop&w=1600&q=80'; // generic curated hero
 
 const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
   heroHeadline:'Insights & Resources',
   heroSubheading:'Stay ahead with the latest thinking from our team.',
   heroImageUrl:DEFAULT_HERO_IMG,
-  fallbackImageUrl:'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
+  fallbackImageUrl:'https://images.unsplash.com/photo-1749371930388-50c782b0acea?auto=format&fit=crop&w=800&q=80',
   articles:[],news:[],aboutText:'',products:[],generated:false,theme:'generic',
 };
 
@@ -129,13 +129,111 @@ function parseMarkdown(raw){
 }
 
 /* ─── IMAGE UTIL ─── */
-function getItemImage(slug,category,index){
-  const CAT_OFFSET={Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
-    Technology:6000,Insights:7000,News:8000,Featured:9000};
-  const offset=CAT_OFFSET[category]||0;
-  const hash=String(slug||index).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
-  const seed=Math.abs(hash)+offset+(index*97);
-  return `https://picsum.photos/seed/${seed}/800/450`;
+/* ─── CURATED IMAGE BANKS per theme ─── */
+const CURATED_IMAGES = {
+  generic: {
+    hero: 'https://images.unsplash.com/photo-1749371930388-50c782b0acea?auto=format&fit=crop&w=1600&q=80',
+    articles: [
+      'https://images.unsplash.com/photo-1768219565623-501f93ae384b?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1772588627479-06ac7a264916?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1752225494606-ae09aca08bea?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1743385779331-15e7e53c2253?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1698843813652-2dc8b8d81f4c?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1644325349124-d1756b79dd42?auto=format&fit=crop&w=800&q=80',
+    ],
+    news: [
+      'https://images.unsplash.com/photo-1663601398716-3d40cef5d1fc?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1762361962969-9e1484e8c8b5?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1768280511074-3b3effe7a139?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1655841439659-0afc60676b70?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1656188505561-19f1a1b6cda8?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1753133488917-7fc3868aec74?auto=format&fit=crop&w=800&q=80',
+    ],
+  },
+  b2btech: {
+    hero: 'https://images.unsplash.com/photo-1727434032773-af3cd98375ba?auto=format&fit=crop&w=1600&q=80',
+    articles: [
+      'https://images.unsplash.com/photo-1584169417032-d34e8d805e8b?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1683322499436-f4383dd59f5a?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1682559736721-c2e77ff4c650?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1535136104956-115a2cd67fc4?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1561233835-f937539b95b9?auto=format&fit=crop&w=800&q=80',
+    ],
+    news: [
+      'https://images.unsplash.com/photo-1580106815433-a5b1d1d53d85?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/flagged/photo-1579274216947-86eaa4b00475?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1695668548342-c0c1ad479aee?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1650327034350-08e408a8f902?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1488229297570-58520851e868?auto=format&fit=crop&w=800&q=80',
+    ],
+  },
+  health: {
+    hero: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=1600&q=80',
+    articles: [
+      'https://images.unsplash.com/photo-1691934286135-ec89a7f2e2a5?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1579154341184-22069e4614d2?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1578496479530-799fd6d0803a?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1763142843470-9a9e9db7f68f?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1738778151587-032287ae9f90?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1743792930023-774d74a015cd?auto=format&fit=crop&w=800&q=80',
+    ],
+    news: [
+      'https://images.unsplash.com/photo-1628771065518-0d82f1938462?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1655913198024-1a30f1c911e5?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1763142842692-b3e649aae313?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1573883429746-084be9b5cfca?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1752842936196-c9248b4eedd6?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1631980838946-755ba8443ab7?auto=format&fit=crop&w=800&q=80',
+    ],
+  },
+  finserv: {
+    hero: 'https://images.unsplash.com/photo-1669951584309-492ed24d274f?auto=format&fit=crop&w=1600&q=80',
+    articles: [
+      'https://images.unsplash.com/photo-1768839724256-28cd4a373209?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1709880945165-d2208c6ad2ec?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1639754390580-2e7437267698?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1745509267699-1b1db256601e?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1730789701634-5386e7271462?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1762427354397-854a52e0ded7?auto=format&fit=crop&w=800&q=80',
+    ],
+    news: [
+      'https://images.unsplash.com/photo-1705948734199-117ec7667630?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1657581439107-e2216db36d72?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1538356343135-65849f66b4a1?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1764700754052-afc4e11c5c64?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1642388889330-3cac79b6111d?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1760657045486-f455ffe66b45?auto=format&fit=crop&w=800&q=80',
+    ],
+  },
+  ecommerce: {
+    hero: 'https://images.unsplash.com/photo-1768796372610-f844d490a734?auto=format&fit=crop&w=1600&q=80',
+    articles: [
+      'https://images.unsplash.com/photo-1769355104335-acef3aa4c9b6?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1704713911962-409fa07a4a3a?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1656639969817-f8399878e5d3?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1768176136613-96a7bfc0049e?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1684695749267-233af13276d0?auto=format&fit=crop&w=800&q=80',
+    ],
+    news: [
+      'https://images.unsplash.com/photo-1757837593538-b4a8654132f1?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1664455340023-214c33a9d0bd?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1772546553887-acf215214154?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1709804945989-c8be542e04db?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1760463921956-b21cfa5cb2ac?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1675388773022-e82caedee672?auto=format&fit=crop&w=800&q=80',
+    ],
+  },
+};
+
+function getItemImage(slug, category, index, theme){
+  // Resolve theme → curated bank
+  const bank = CURATED_IMAGES[theme] || CURATED_IMAGES.generic;
+  const isNews = category === 'News' || category === 'Latest';
+  const pool = isNews ? bank.news : bank.articles;
+  return pool[index % pool.length];
 }
 
 /* ─── STRIP MARKDOWN for card previews ─── */
@@ -330,7 +428,7 @@ function navigate(path){window.location.hash=path;}
 
 /* ─── ROOT APP ─── */
 function App(){
-  const CONFIG_VERSION = '2026-05-11-v4'; // bumped: forces localStorage wipe for image fix
+  const CONFIG_VERSION = '2026-05-11-v5'; // bumped: curated image banks per theme
   const [config,setConfig]=useState(()=>{
     try{
       const s=localStorage.getItem('hub_config');
@@ -750,7 +848,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       summary:String(a.summary||a.description||''),
       slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
       category:String(a.category||(t==='news'?'News':'Insights')),
-      imageUrl:getItemImage(a.slug||(a.title||t+'-'+i),a.category||(t==='news'?'News':'Insights'),i),
+      imageUrl:getItemImage(a.slug||(a.title||t+'-'+i),a.category||(t==='news'?'News':'Insights'),i,'generic'),
       readTime:t==='news'?'2 min read':'5 min read',
       date:String(a.date||new Date(Date.now()-i*86400000*3).toISOString().slice(0,10)),
       body:parseMarkdown('<p>'+(a.summary||a.description||'Coming soon.')+'</p>'),
@@ -1055,7 +1153,7 @@ function ValidatePage(){
         <div style={{flex:1,overflowY:'auto',overflowX:'hidden',padding:'20px 24px'}}>
           {tab==='brand'&&<>
             <Section title="Design Theme">
-              <ThemeToggle value={local.theme||'generic'} onChange={v=>setLocal(p=>({...p,theme:v}))}/>
+              <ThemeToggle value={local.theme||'generic'} onChange={v=>{const bank=CURATED_IMAGES[v]||CURATED_IMAGES.generic;const defaultHeros=Object.values(CURATED_IMAGES).map(b=>b.hero);const heroIsDefault=!local.heroImageUrl||defaultHeros.includes(local.heroImageUrl)||local.heroImageUrl===DEFAULT_HERO_IMG;setLocal(p=>({...p,theme:v,heroImageUrl:heroIsDefault?bank.hero:p.heroImageUrl}));}}/>
               <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{THEMES[local.theme||'generic']?.description}</div>
             </Section>
             <Section title="Colors">
@@ -1377,7 +1475,7 @@ function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   const useStoredImg=item.imageUrl&&REAL_SOURCES.includes(item.source);
   const image=useStoredImg
     ?item.imageUrl
-    :getItemImage(item.slug||item.id,item.category,index);
+    :getItemImage(item.slug||item.id,item.category,index,config.theme);
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
@@ -1610,7 +1708,7 @@ function DetailPage({slug,type}){
   const useStoredImg=item.imageUrl&&REAL_SOURCES.includes(item.source);
   const image=useStoredImg
     ?item.imageUrl
-    :getItemImage(item.slug||item.id,item.category,0);
+    :getItemImage(item.slug||item.id,item.category,0,config.theme);
   const body=parseMarkdown(item.body||`<p>${item.summary}</p><h2>Key insights</h2><p>This ${type} explores the latest developments in ${item.category||'this space'}, offering practical guidance for teams looking to stay ahead.</p><p>From strategy to execution, the ideas here are grounded in real-world experience and informed by industry research and best practices.</p><blockquote><p>"The best content isn't just well-written — it's well-timed, well-placed, and well-measured."</p></blockquote><p>The path forward requires deliberate choices about which tools and platforms to prioritize. This offers a framework for making those decisions with confidence.</p>`);
 
   return(
