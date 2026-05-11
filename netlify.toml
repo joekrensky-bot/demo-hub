@@ -4,4 +4,7 @@
   status = 200
 
 [functions]
-  node_bundler = "esbuild"
+  directory = "netlify/functions"
+
+[[functions."claude-proxy"]]
+  timeout = 26
