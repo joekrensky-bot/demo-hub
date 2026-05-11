@@ -1444,25 +1444,50 @@ function TF({label,value,onChange,multiline,hint}){
   );
 }
 function ContentItemEditor({item,num,onChange,titleOnly}){
-  const srcColor={'firecrawl':'#16a34a','unsplash':'#2563eb','fallback':'#94a3b8','jasper':'#FF4F00'}[item.imageSource||'fallback']||'#94a3b8';
-  const srcLabel={'firecrawl':'📸 Real site image','unsplash':'🖼 Unsplash' + (item.imageQuery?' · '+item.imageQuery:''),'fallback':'◻ Curated fallback','jasper':'✦ Jasper'}[item.imageSource||'fallback']||'◻ Curated fallback';
+  const [imgInput,setImgInput]=React.useState('');
+  const isManual=item.imageSource==='manual';
+  const srcColor={'firecrawl':'#16a34a','unsplash':'#2563eb','fallback':'#94a3b8','jasper':'#FF4F00','manual':'#7c3aed','curated':'#0369a1','picsum':'#94a3b8','gpt-paste':'#94a3b8'}[item.imageSource||'fallback']||'#94a3b8';
+  const srcLabel={'firecrawl':'📸 Real','unsplash':'🖼 Unsplash','fallback':'◻ Curated','jasper':'✦ Jasper','manual':'✎ Custom','curated':'◈ Curated','picsum':'◻ Curated','gpt-paste':'◻ Curated'}[item.imageSource||'fallback']||'◻ Curated';
+  const applyImg=()=>{
+    const url=imgInput.trim();
+    if(url){onChange({...item,imageUrl:url,imageSource:'manual'});setImgInput('');}
+  };
+  const clearImg=()=>onChange({...item,imageUrl:'',imageSource:'fallback'});
   return(
-    <div style={{display:'flex',gap:10,marginBottom:10,padding:10,background:'#f8fafc',borderRadius:8,border:'1px solid #e2e8f0'}}>
-      <div style={{width:22,height:22,minWidth:22,background:'#e2e8f0',color:'#64748b',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,marginTop:2}}>{num}</div>
-      <div style={{flex:1}}>
-        <input value={item.title} placeholder="Title" onChange={e=>onChange({...item,title:e.target.value})}
-          style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'6px 10px',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'#0f172a',marginBottom:6,outline:'none',background:'white'}}/>
-        {!titleOnly&&<textarea value={item.summary} placeholder="Summary" rows={2} onChange={e=>onChange({...item,summary:e.target.value})}
-          style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'6px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',resize:'none',lineHeight:1.5,background:'white',marginBottom:6}}/>}
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          {item.imageUrl&&<img src={item.imageUrl} alt="" style={{width:48,height:32,objectFit:'cover',borderRadius:4,border:'1px solid #e2e8f0',flexShrink:0}} onError={e=>e.target.style.display='none'}/>}
-          <div>
-            <div style={{fontSize:10,fontWeight:600,color:srcColor}}>{srcLabel}</div>
-            {item.imageUrl&&<div style={{fontSize:10,color:'#94a3b8',marginTop:1,wordBreak:'break-all',maxWidth:220}}>{item.imageUrl.slice(0,60)}{item.imageUrl.length>60?'…':''}</div>}
+    <div style={{marginBottom:12,padding:14,background:'#f8fafc',borderRadius:10,border:`1px solid ${isManual?'#c4b5fd':'#e2e8f0'}`}}>
+      <div style={{display:'flex',gap:10,marginBottom:10}}>
+        <div style={{width:22,height:22,minWidth:22,background:'#e2e8f0',color:'#64748b',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,marginTop:2}}>{num}</div>
+        <div style={{flex:1}}>
+          <input value={item.title} placeholder="Title" onChange={e=>onChange({...item,title:e.target.value})}
+            style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'7px 10px',fontSize:13,fontFamily:'DM Sans,sans-serif',color:'#0f172a',marginBottom:8,outline:'none',background:'white'}}/>
+          {!titleOnly&&<textarea value={item.summary} placeholder="Summary" rows={3} onChange={e=>onChange({...item,summary:e.target.value})}
+            style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:6,padding:'7px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',resize:'vertical',lineHeight:1.5,background:'white',marginBottom:0}}/>}
+        </div>
+      </div>
+      {/* Image section */}
+      <div style={{marginLeft:32}}>
+        {/* Preview — always show either user image or curated placeholder */}
+        <div style={{marginBottom:8,borderRadius:8,overflow:'hidden',border:`1.5px solid ${isManual?'#8b5cf6':'#e2e8f0'}`,height:160,background:'#f1f5f9',position:'relative'}}>
+          <img src={item.imageUrl||''} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}
+            onError={e=>{e.target.style.display='none';}}/>
+          <div style={{position:'absolute',bottom:0,left:0,right:0,background:'rgba(0,0,0,0.45)',padding:'5px 10px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{fontSize:10,fontWeight:600,color:isManual?'#c4b5fd':'#cbd5e1'}}>{isManual?'✎ Custom image':srcLabel}</span>
+            {isManual&&<button onClick={clearImg} style={{fontSize:10,color:'#fca5a5',background:'none',border:'none',cursor:'pointer',padding:0}}>✕ remove</button>}
           </div>
-          <input type="text" value={item.imageUrl||''} onChange={e=>onChange({...item,imageUrl:e.target.value,imageSource:'manual'})}
-            placeholder="Override image URL…"
-            style={{flex:1,border:'1px solid #e2e8f0',borderRadius:6,padding:'4px 8px',fontSize:11,fontFamily:'DM Sans,sans-serif',color:'#64748b',outline:'none',background:'white',minWidth:0}}/>
+        </div>
+        {/* URL input + submit */}
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <label style={{fontSize:11,fontWeight:500,color:'#374151'}}>Override with custom image URL</label>
+          <div style={{display:'flex',gap:6}}>
+            <input type="text" value={imgInput} onChange={e=>setImgInput(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&applyImg()}
+              placeholder="https://example.com/photo.jpg"
+              style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:6,padding:'8px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#0f172a',outline:'none',background:'white',minWidth:0}}/>
+            <button onClick={applyImg} disabled={!imgInput.trim()}
+              style={{padding:'8px 14px',background:imgInput.trim()?'#7c3aed':'#e2e8f0',color:imgInput.trim()?'white':'#94a3b8',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:imgInput.trim()?'pointer':'not-allowed',fontFamily:'DM Sans,sans-serif',whiteSpace:'nowrap',flexShrink:0}}>
+              Apply ↵
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1634,11 +1659,16 @@ function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   // Recompute via picsum if stored image is a stale hardcoded Unsplash fallback
   // Trust stored imageUrl only if it came from a real scrape or Unsplash API.
   // Recompute everything else (old hardcoded Unsplash IDs, old picsum seeds, empty).
-  const REAL_SOURCES=['unsplash','scraped','firecrawl','jasper-doc'];
-  const useStoredImg=item.imageUrl&&REAL_SOURCES.includes(item.source);
-  const image=useStoredImg
-    ?item.imageUrl
-    :getItemImage(item.slug||item.id,item.category,index,config.theme);
+  // Trust: real scrapes, Unsplash API, user-supplied manual overrides, curated
+  // Do NOT trust: old hardcoded picsum/unsplash seeds (source=picsum/gpt-paste/undefined)
+  // Priority: user-supplied (manual) > real scrape/API > curated bank (recomputed)
+  const userSupplied = item.imageSource==='manual' && item.imageUrl;
+  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc'].includes(item.source);
+  const image = userSupplied
+    ? item.imageUrl
+    : realSource
+      ? item.imageUrl
+      : getItemImage(item.slug||item.id,item.category,index,config.theme);
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
@@ -1702,9 +1732,12 @@ function HeroSection({config}){
   const isMonospace=ts.heroFont==='monospace';
   return(
     <section style={{minHeight:520,display:'flex',alignItems:'center',justifyContent:'center',
-      background:config.heroImageUrl
-        ?`linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${config.heroImageUrl}) center center / cover no-repeat`
-        :ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`,
+      background:(()=>{
+        // Priority: user-set URL > curated theme hero > brand color gradient
+        const heroImg=config.heroImageUrl||(CURATED_IMAGES[config.theme||'generic']||CURATED_IMAGES.generic).hero;
+        if(heroImg) return `linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 100%), url(${heroImg}) center center / cover no-repeat`;
+        return ts.forceDark?`linear-gradient(135deg,${ts.brandBg} 0%,#0d1f3c 100%)`:`linear-gradient(135deg, ${config.brandPrimary} 0%, ${config.brandPrimary}dd 100%)`;
+      })(),
       position:'relative',overflow:'hidden'}}>
       <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 32px',width:'100%',display:'flex',alignItems:'center'}}>
         <div style={{maxWidth:600}}>
@@ -1867,8 +1900,8 @@ function DetailPage({slug,type}){
 
   // Trust stored imageUrl only if it came from a real scrape or Unsplash API.
   // Recompute everything else (old hardcoded Unsplash IDs, old picsum seeds, empty).
-  const REAL_SOURCES=['unsplash','scraped','firecrawl','jasper-doc'];
-  const useStoredImg=item.imageUrl&&REAL_SOURCES.includes(item.source);
+  const REAL_SOURCES=['unsplash','scraped','firecrawl','jasper-doc','manual','curated'];
+  const useStoredImg=item.imageUrl&&(REAL_SOURCES.includes(item.source)||item.imageSource==='manual');
   const image=useStoredImg
     ?item.imageUrl
     :getItemImage(item.slug||item.id,item.category,0,config.theme);

@@ -19,18 +19,19 @@ exports.handler = async (event) => {
 
   let url='', articleUrl='', jasperUserId='hTcTOK3m6xUCKwznLDLXwem3Y9E2', manual=false;
   let _jasperPush=false, _action='', _jasperApiKey='', _projectId='', _docTitle='', _docContent='', _projectName='';
+  let _workatoPush=false, _workatoUrl='', _wCompany='', _wTitle='', _wContent='', _wUserId='';
   try {
     const p = JSON.parse(event.body||'{}');
     url = String(p.url||''); articleUrl = String(p.articleUrl||'');
     jasperUserId = String(p.jasperUserId||jasperUserId);
     manual = Boolean(p.manual);
     _jasperPush = Boolean(p._jasperPush);
-    const _workatoPush = Boolean(p._workatoPush);
-    const _workatoUrl = String(p.workatoWebhookUrl||'');
-    const _wCompany = String(p.companyName||'');
-    const _wTitle = String(p.articleTitle||'');
-    const _wContent = String(p.articleContent||'');
-    const _wUserId = String(p.userId||'');
+    _workatoPush = Boolean(p._workatoPush);
+    _workatoUrl = String(p.workatoWebhookUrl||'');
+    _wCompany = String(p.companyName||'');
+    _wTitle = String(p.articleTitle||'');
+    _wContent = String(p.articleContent||'');
+    _wUserId = String(p.userId||'');
     _action = String(p.action||'');
     _jasperApiKey = String(p.jasperApiKey||'');
     _projectId = String(p.projectId||'');
