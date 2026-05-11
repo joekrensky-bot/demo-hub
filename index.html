@@ -32,17 +32,23 @@ button{font-family:var(--font-sans);cursor:pointer;border:none}
 const {useState, useEffect, useContext, createContext, useRef, useCallback} = React;
 
 /* ─── CONSTANTS ─── */
+const JASPER_LOGO_LIGHT = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb2e0705768b531d051_jasper-wordmark-light.svg';
+const JASPER_LOGO_FLAME = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb209057029cc921078_jasper-wordmark-flame.svg';
+const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=1600&q=80';
+
 const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
-  prospectUrl:'',articleUrl:'',brandPrimary:'#0f172a',brandAccent:'#6366f1',
-  brandBg:'#f9f7f4',brandText:'#0f172a',brandHeaderText:'#ffffff',
-  companyName:'Content Hub',logoUrl:'',
+  prospectUrl:'',articleUrl:'',
+  brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
+  brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
+  companyName:'Content Hub',
+  logoUrl:JASPER_LOGO_LIGHT,
   heroHeadline:'Insights & Resources',
   heroSubheading:'Stay ahead with the latest thinking from our team.',
-  heroImageUrl:'',
-  fallbackImageUrl:'https://picsum.photos/seed/fallback/800/450',heroImageUrl:'https://picsum.photos/seed/hero/1600/900',
+  heroImageUrl:DEFAULT_HERO_IMG,
+  fallbackImageUrl:'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=800&q=80',
   articles:[],news:[],aboutText:'',products:[],generated:false,theme:'generic',
 };
 
@@ -51,6 +57,77 @@ const HubCtx = createContext(null);
 const useHub = () => useContext(HubCtx);
 
 /* ─── UTILS ─── */
+function parseMarkdown(raw){
+  if(!raw||typeof raw!=='string')return raw||'';
+  // If it already looks like HTML (has real tags), just clean up leftover markdown symbols lightly
+  const hasHtml=/<(p|h[1-6]|ul|ol|li|blockquote|strong|em|div|br)[^>]*>/i.test(raw);
+
+  const lines=raw.split('\n');
+  const out=[];
+  let listOpen=false;
+
+  const closeList=()=>{if(listOpen){out.push('</ul>');listOpen=false;}};
+  const inlineFormat=s=>s
+    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.9em;">$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" style="color:inherit;text-decoration:underline;text-underline-offset:2px;">$1</a>');
+
+  if(hasHtml){
+    // Already HTML — just strip stray leading # symbols from paragraph text
+    return raw
+      .replace(/<p[^>]*>#{1,6}\s*/g,'<p>')
+      .replace(/^#{1,6}\s+/gm,'');
+  }
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    const trimmed=line.trim();
+
+    if(!trimmed){closeList();out.push('');continue;}
+    if(/^---+$/.test(trimmed)){closeList();out.push('<hr style="border:none;border-top:1px solid #e2e8f0;margin:28px 0;">');continue;}
+
+    // Headings
+    const h3=trimmed.match(/^###\s+(.+)/);
+    const h2=trimmed.match(/^##\s+(.+)/);
+    const h1=trimmed.match(/^#\s+(.+)/);
+    if(h3){closeList();out.push('<h3 style="font-size:18px;font-weight:600;margin:28px 0 10px;line-height:1.3;">'+inlineFormat(h3[1])+'</h3>');continue;}
+    if(h2){closeList();out.push('<h2>'+inlineFormat(h2[1])+'</h2>');continue;}
+    if(h1){closeList();out.push('<h2>'+inlineFormat(h1[1])+'</h2>');continue;}
+
+    // Blockquote
+    const bq=trimmed.match(/^>\s*(.*)/);
+    if(bq){closeList();out.push('<blockquote><p>'+inlineFormat(bq[1])+'</p></blockquote>');continue;}
+
+    // Unordered list
+    const li=trimmed.match(/^[-*]\s+(.+)/);
+    if(li){
+      if(!listOpen){out.push('<ul style="margin:16px 0 16px 20px;display:flex;flex-direction:column;gap:6px;">');listOpen=true;}
+      out.push('<li style="line-height:1.6;">'+inlineFormat(li[1])+'</li>');
+      continue;
+    }
+
+    // Numbered list
+    const oli=trimmed.match(/^\d+\.\s+(.+)/);
+    if(oli){
+      if(!listOpen){out.push('<ol style="margin:16px 0 16px 20px;display:flex;flex-direction:column;gap:6px;">');listOpen=true;}
+      out.push('<li style="line-height:1.6;">'+inlineFormat(oli[1])+'</li>');
+      continue;
+    }
+
+    closeList();
+    out.push('<p>'+inlineFormat(trimmed)+'</p>');
+  }
+  closeList();
+
+  // Collapse multiple empty lines, merge consecutive <p> runs into single paragraphs
+  return out
+    .filter((l,i,a)=>!(l===''&&a[i-1]===''))
+    .join('\n')
+    .replace(/<\/p>\n<p>/g,'</p><p>');
+}
+
 function applyBrandVars(c){
   const r = document.documentElement;
   r.style.setProperty('--brand-primary', c.brandPrimary);
@@ -655,7 +732,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       category:String(a.category||(t==='news'?'News':'Insights')),
       readTime:t==='news'?'2 min read':'5 min read',
       date:String(a.date||new Date(Date.now()-i*86400000*3).toISOString().slice(0,10)),
-      body:'<p>'+(a.summary||a.description||'Coming soon.')+'</p>',
+      body:parseMarkdown('<p>'+(a.summary||a.description||'Coming soon.')+'</p>'),
       source:'gpt-paste',isNew:false,jasperDocId:null,jasperDocUrl:null,
     });
 
@@ -777,11 +854,20 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
                 {/* ── GPT Prompt to copy ── */}
                 <div style={{marginBottom:14}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                    <label style={{fontSize:12,fontWeight:600,color:'#374151'}}>Step 1 — Copy this prompt into ChatGPT</label>
-                    <button onClick={()=>navigator.clipboard.writeText(GPT_PROMPT)}
-                      style={{fontSize:11,fontWeight:600,color:'#6366f1',background:'#eef2ff',border:'none',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
-                      Copy prompt
-                    </button>
+                    <div>
+                      <label style={{fontSize:12,fontWeight:600,color:'#374151'}}>Step 1 — Run the GPT agent, then paste results below</label>
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+                        <a href="https://chatgpt.com/g/g-6a0221c8ca988191a9c5cdea0e45d57b-website-prospect-extractor" target="_blank" rel="noopener noreferrer"
+                          style={{fontSize:11,fontWeight:600,color:'white',background:'#10a37f',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif',textDecoration:'none',display:'inline-flex',alignItems:'center',gap:4}}>
+                          <span style={{fontSize:13}}>&#x2197;</span> Open GPT Agent
+                        </a>
+                        <span style={{fontSize:11,color:'#94a3b8'}}>or</span>
+                        <button onClick={()=>navigator.clipboard.writeText(GPT_PROMPT)}
+                          style={{fontSize:11,fontWeight:600,color:'#6366f1',background:'#eef2ff',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                          Copy manual prompt
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <pre style={{fontSize:10.5,color:'#475569',background:'white',border:'1px solid #e2e8f0',borderRadius:8,
                     padding:'10px 12px',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.6,maxHeight:140,overflowY:'auto',
@@ -1172,13 +1258,21 @@ function HubLayout({children}){
         <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px',height:64,display:'flex',alignItems:'center',gap:32}}>
           <a href="#/demo" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
             {config.logoUrl
-              ?<img src={config.logoUrl} alt={config.companyName}
-                style={{height:28,maxWidth:160,objectFit:'contain',
-                  filter:getThemeStyles(config.theme||'generic',config).navTextColor==='#ffffff'?'brightness(0) invert(1)':'none'}}
-                onError={e=>{
-                  e.target.style.display='none';
-                  e.target.nextSibling.style.display='block';
-                }}/>
+              ?(()=>{
+                  const navIsLight=getThemeStyles(config.theme||'generic',config).navTextColor!=='#ffffff'&&getThemeStyles(config.theme||'generic',config).navTextColor!=='#fff';
+                  // For Jasper default logos: swap variant instead of CSS filter
+                  const isJasperLogo=config.logoUrl===JASPER_LOGO_LIGHT||config.logoUrl===JASPER_LOGO_FLAME;
+                  const resolvedLogo=isJasperLogo?(navIsLight?JASPER_LOGO_FLAME:JASPER_LOGO_LIGHT):config.logoUrl;
+                  const logoFilter=(!isJasperLogo&&!navIsLight)?'brightness(0) invert(1)':'none';
+                  return(
+                    <img src={resolvedLogo} alt={config.companyName}
+                      style={{height:28,maxWidth:180,objectFit:'contain',filter:logoFilter}}
+                      onError={e=>{
+                        e.target.style.display='none';
+                        e.target.nextSibling.style.display='block';
+                      }}/>
+                  );
+                })()
               :null
             }
             <span style={{fontSize:17,fontWeight:700,color:getThemeStyles(config.theme||'generic',config).navTextColor,letterSpacing:'-0.2px',display:config.logoUrl?'none':'block'}}>
@@ -1483,7 +1577,7 @@ function DetailPage({slug,type}){
   if(!item)return null;
 
   const image=item.imageUrl||config.fallbackImageUrl;
-  const body=item.body||`<p>${item.summary}</p><h2>Key insights</h2><p>This ${type} explores the latest developments in ${item.category||'this space'}, offering practical guidance for teams looking to stay ahead.</p><p>From strategy to execution, the ideas here are grounded in real-world experience and informed by industry research and best practices.</p><blockquote><p>"The best content isn't just well-written — it's well-timed, well-placed, and well-measured."</p></blockquote><p>The path forward requires deliberate choices about which tools and platforms to prioritize. This offers a framework for making those decisions with confidence.</p>`;
+  const body=parseMarkdown(item.body||`<p>${item.summary}</p><h2>Key insights</h2><p>This ${type} explores the latest developments in ${item.category||'this space'}, offering practical guidance for teams looking to stay ahead.</p><p>From strategy to execution, the ideas here are grounded in real-world experience and informed by industry research and best practices.</p><blockquote><p>"The best content isn't just well-written — it's well-timed, well-placed, and well-measured."</p></blockquote><p>The path forward requires deliberate choices about which tools and platforms to prioritize. This offers a framework for making those decisions with confidence.</p>`);
 
   return(
     <HubLayout>
