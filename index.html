@@ -497,71 +497,38 @@ function SetupPage(){
   };
 
   const handleManual=async()=>{
-    const co=manual.companyName.trim()||'Content Hub';
-    if(!co){setError('Please enter a company name');return;}
-    setError('');setLoading(true);setLoadingMsg('✦ Generating content with Claude...');
-    const loadSteps=['✦ Generating content with Claude...','✍️ Writing articles...','📰 Writing news items...','🧠 Drafting about page...','🚀 Almost there...'];
+    const co=(manual.companyName||'').trim()||'Content Hub';
+    setError('');setLoading(true);setLoadingMsg('\u2756 Generating content...');
+    const loadSteps=[
+      '\u2756 Generating content...',
+      '\u270d\ufe0f Writing articles...',
+      '\ud83d\udcf0 Writing news items...',
+      '\ud83e\udde0 Drafting about page...',
+      '\ud83d\ude80 Almost there...',
+    ];
     let si=0;
     const iv=setInterval(()=>{si=(si+1)%loadSteps.length;setLoadingMsg(loadSteps[si]);},1800);
     try{
-      const IMGS=[
-        'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
-        'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
-        'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
-        'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
-        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-        'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
-      ];
-      const prompt=`You are generating demo content for a branded content hub for a company called "${co}". Return ONLY valid JSON with this exact shape — no markdown, no explanation:
-{
-  "articles":[
-    {"title":"","summary":"","category":"one of Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen-slug"},
-    ... 6 total
-  ],
-  "news":[
-    {"title":"","summary":"","slug":"lowercase-hyphen-slug"},
-    ... 6 total
-  ],
-  "aboutText":"2 paragraphs about the company content hub, professional tone"
-}
-Make titles and summaries feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:1800,
-          messages:[{role:'user',content:prompt}]
-        })
+      const res=await fetch('/.netlify/functions/claude-proxy',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({url:co,manual:true})
       });
-      if(!res.ok){const t=await res.text();throw new Error('Claude API '+res.status+': '+t.slice(0,120));}
-      const data=await res.json();
-      const raw=data.content?.[0]?.text||'{}';
-      const clean=raw.replace(/```json|```/g,'').trim();
-      let parsed={articles:[],news:[],aboutText:''};
-      try{parsed=JSON.parse(clean);}catch(pe){throw new Error('Could not parse Claude response: '+pe.message);}
-      const mkItem=(a,i,t)=>({
-        id:t+'-'+i,title:String(a.title||t+' '+(i+1)),
-        summary:String(a.summary||''),imageUrl:IMGS[i%IMGS.length],
-        slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/,'')||t+'-'+i),
-        category:String(a.category||(t==='news'?'News':'Insights')),
-        readTime:t==='news'?'2 min read':'5 min read',
-        date:new Date(Date.now()-i*86400000*3).toISOString().slice(0,10),
-        body:'<p>'+(a.summary||'Coming soon.')+'</p>',
-        source:'manual',isNew:false,jasperDocId:null,jasperDocUrl:null,
-      });
+      if(!res.ok){const t=await res.text();throw new Error('Proxy '+res.status+': '+t.slice(0,120));}
+      const brand=await res.json();
+      if(brand.error) throw new Error(brand.error);
       clearInterval(iv);
       updateConfig({
         ...DEFAULT_CONFIG,...manual,
         brandHeaderText:bestTextColor(manual.brandPrimary),
         companyName:co,
-        logoUrl:manual.logoUrl||'',
-        heroHeadline:manual.heroHeadline||'Insights & Resources',
-        heroSubheading:manual.heroSubheading||'Stay ahead with the latest thinking from our team.',
-        articles:(parsed.articles||[]).slice(0,6).map((a,i)=>mkItem(a,i,'article')),
-        news:(parsed.news||[]).slice(0,6).map((a,i)=>mkItem(a,i,'news')),
-        aboutText:String(parsed.aboutText||''),
-        products:[],generated:false,
+        logoUrl:manual.logoUrl||brand.logoUrl||'',
+        heroHeadline:manual.heroHeadline||brand.heroHeadline||'Insights & Resources',
+        heroSubheading:manual.heroSubheading||brand.heroSubheading||'Stay ahead with the latest thinking from our team.',
+        articles:brand.articles||[],
+        news:brand.news||[],
+        aboutText:brand.aboutText||'',
+        products:brand.products||[],
+        generated:false,
       });
       navigate('/validate');
     }catch(e){
