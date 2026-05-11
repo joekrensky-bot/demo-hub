@@ -1139,39 +1139,38 @@ function ValidatePage(){
 
   const handleGenerate=async()=>{
     const heroArt=local.articles?.[0];
-    const apiKey=local.jasperApiKey||config.jasperApiKey||'';
-    const userId=local.jasperUserId||config.jasperUserId||'';
+    const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
+    const userId=(local.jasperUserId||config.jasperUserId||'').trim();
 
-    // If we have a Jasper API key and a hero article with real content, push it
-    if(apiKey&&heroArt&&heroArt.body&&heroArt.body.length>50){
+    if(apiKey&&heroArt){
       setPushing(true);setPushStatus('pushing');
       try{
-        // Single call: create project + document together
-        const cleanBody=heroArt.body.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        const rawBody=String(heroArt.body||heroArt.summary||heroArt.title||'');
+        const cleanBody=rawBody.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        const payload={
+          _jasperPush:true,
+          action:'pushHeroArticle',
+          jasperApiKey:apiKey,
+          jasperUserId:userId,
+          projectName:(local.companyName||'Content Hub')+' — Content Hub',
+          title:heroArt.title||'Hero Article',
+          content:cleanBody||heroArt.title||'Hero Article',
+        };
+        setPushStatus('Sending to Jasper API…');
         const pushRes=await fetch('/.netlify/functions/claude-proxy',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            _jasperPush:true,
-            action:'pushHeroArticle',
-            jasperApiKey:apiKey,
-            jasperUserId:userId,
-            projectName:local.companyName+' — Content Hub',
-            title:heroArt.title||'Hero Article',
-            content:cleanBody,
-          })
+          body:JSON.stringify(payload)
         });
         const pushData=await pushRes.json();
         if(!pushRes.ok||pushData.error){
-          console.error('Jasper push error:',pushData.error,pushData._debug);
-          setPushStatus('error');
-          updateConfig({...local,generated:true});
-          setTimeout(()=>navigate('/demo'),0);
+          setPushStatus('error:'+JSON.stringify(pushData.error||pushData).slice(0,200));
+          setPushing(false);
+          // Don't navigate — stay on page so user can see error
           return;
         }
         const jasperDocId=pushData.docId||'';
         const jasperDocUrl=pushData.appUrl||'';
-        console.log('Jasper push success — appUrl:',jasperDocUrl,'debug:',pushData._debug);
-        // Update hero article with Jasper doc link
+        setPushStatus('done:'+jasperDocUrl);
         const updatedArticles=[...(local.articles||[])];
         if(updatedArticles[0]){
           updatedArticles[0]={...updatedArticles[0],
@@ -1180,15 +1179,14 @@ function ValidatePage(){
             source:'jasper-doc',
           };
         }
-        setPushStatus('done');
         updateConfig({...local,articles:updatedArticles,generated:true});
+        setPushing(false);
         setTimeout(()=>navigate('/demo'),0);
       }catch(e){
-        setPushStatus('error');
-        console.error('Jasper push exception:',e);
-        updateConfig({...local,generated:true});
-        setTimeout(()=>navigate('/demo'),0);
-      }finally{setPushing(false);}
+        setPushStatus('exception:'+e.message);
+        setPushing(false);
+        // Don't navigate — stay on page so user can see error
+      }
     } else {
       updateConfig({...local,generated:true});
       setTimeout(()=>navigate('/demo'),0);
@@ -1346,16 +1344,29 @@ function ValidatePage(){
         </div>
 
         <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0'}}>
+          {pushStatus&&pushStatus.startsWith('error')&&(
+            <div style={{marginBottom:8,padding:'10px 12px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all',lineHeight:1.5}}>
+              ⚠ Jasper push failed: {pushStatus.replace('error:','')}
+              <div style={{marginTop:6,fontSize:11,fontFamily:'DM Sans,sans-serif',color:'#dc2626'}}>Hub will still generate — check your API key and User ID in ⚙ Settings.</div>
+            </div>
+          )}
+          {pushStatus&&pushStatus.startsWith('exception')&&(
+            <div style={{marginBottom:8,padding:'10px 12px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all'}}>
+              ⚠ {pushStatus}
+            </div>
+          )}
           {pushing
             ?<div style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:14,background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:12}}>
               <div style={{width:18,height:18,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
-              <span style={{fontSize:14,color:'#FF4F00',fontWeight:500}}>Pushing to Jasper workspace...</span>
+              <span style={{fontSize:14,color:'#FF4F00',fontWeight:500}}>{typeof pushStatus==='string'&&pushStatus!=='pushing'?pushStatus:'Pushing to Jasper workspace…'}</span>
             </div>
             :<button onClick={handleGenerate}
               style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
               onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
-              <span>🚀 Generate Hub {(local.jasperApiKey||config.jasperApiKey)&&local.articles?.[0]?.body?.length>50?'& Push to Jasper':''}</span>
-              {(local.jasperApiKey||config.jasperApiKey)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>✦ Hero article will be created in your Jasper workspace</span>}
+              <span>🚀 {(local.jasperApiKey||config.jasperApiKey)?'Generate Hub & Push to Jasper':'Generate Hub'}</span>
+              {(local.jasperApiKey||config.jasperApiKey)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>
+                ✦ Creates a Canvas project + hero article doc in your workspace
+              </span>}
             </button>
           }
         </div>

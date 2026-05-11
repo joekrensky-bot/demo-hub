@@ -40,12 +40,12 @@ exports.handler = async (event) => {
   if (_jasperPush) {
     if (!_jasperApiKey) return { statusCode:400, headers:H, body:JSON.stringify({error:'jasperApiKey required'}) };
     const jH = { 'Content-Type':'application/json', 'X-API-Key': _jasperApiKey };
-    log('Jasper push: action=' + _action + ' userId=' + jasperUserId);
+    log('Jasper push: action=' + _action + ' userId=' + jasperUserId + ' key=' + _jasperApiKey.slice(0,12) + '…');
     try {
       // ── Single action: create project + document in one function call ──
       if (_action === 'pushHeroArticle') {
         // Step 1: create Canvas project
-        log('Creating project: ' + _projectName);
+        log('Creating project: "' + _projectName + '" for userId=' + jasperUserId);
         const pRes = await fetch('https://api.jasper.ai/v1/projects', {
           method:'POST', headers:jH,
           body:JSON.stringify({ userId:jasperUserId, name:_projectName }),
