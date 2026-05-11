@@ -57,30 +57,50 @@ Return ONLY a valid JSON object, no markdown, no explanation:
 }
 Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
 
-      const gr = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Race OpenAI against a 7s wall — return fallback content if it loses
+      const deadline = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), 7000));
+      const gptCall = fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OK },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          max_tokens: 1800,
+          max_tokens: 1200,
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: 'Return only valid JSON. No markdown. No explanation.' },
             { role: 'user', content: prompt },
           ],
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(7500),
       });
 
-      if (!gr.ok) {
-        const et = await gr.text();
-        throw new Error('OpenAI ' + gr.status + ': ' + et.slice(0, 120));
-      }
-
-      const gd = await gr.json();
-      const raw = gd.choices?.[0]?.message?.content || '{}';
       let parsed = { articles: [], news: [], aboutText: '' };
-      try { parsed = JSON.parse(raw); } catch (pe) { log('JSON parse err: ' + pe.message); }
+      try {
+        const gr = await Promise.race([gptCall, deadline]);
+        if (!gr.ok) { const et = await gr.text(); throw new Error('OpenAI ' + gr.status + ': ' + et.slice(0, 120)); }
+        const gd = await gr.json();
+        const raw = gd.choices?.[0]?.message?.content || '{}';
+        try { parsed = JSON.parse(raw); } catch (pe) { log('JSON parse err: ' + pe.message); }
+        log('GPT manual done: ' + (parsed.articles?.length || 0) + ' articles');
+      } catch (timeoutOrErr) {
+        log('GPT timeout/err: ' + timeoutOrErr.message + ' — using placeholder content');
+        // Build lightweight placeholder content so we never hard-fail
+        const cats = ['Marketing','AI','Strategy','Growth','Content','Technology'];
+        parsed.articles = cats.map((cat, i) => ({
+          title: co + ': ' + cat + ' Insights for ' + new Date().getFullYear(),
+          summary: 'Explore how ' + co + ' approaches ' + cat.toLowerCase() + ' to drive business outcomes.',
+          category: cat, slug: cat.toLowerCase() + '-insights-' + i,
+        }));
+        parsed.news = [
+          { title: co + ' Announces New Product Updates', summary: 'The latest product enhancements now available.', slug: 'product-updates' },
+          { title: co + ' Named a Leader in Industry Report', summary: 'Recognized for innovation and customer success.', slug: 'industry-leader' },
+          { title: co + ' Expands Partnership Ecosystem', summary: 'New integrations to accelerate customer workflows.', slug: 'partnerships' },
+          { title: co + ' Customer Spotlight: Driving ROI', summary: 'How customers achieve measurable results with ' + co + '.', slug: 'customer-spotlight' },
+          { title: co + ' Releases Annual State of Industry Report', summary: 'Key findings from surveying 1,000+ professionals.', slug: 'state-of-industry' },
+          { title: co + ' Hosts Virtual Summit', summary: 'Join industry leaders for a day of learning and networking.', slug: 'virtual-summit' },
+        ];
+        parsed.aboutText = co + ' is dedicated to helping teams create, collaborate, and grow. Our content hub brings together the latest insights, product news, and industry thinking to keep you informed and ahead of the curve.';
+      }
 
       log('GPT manual done: ' + (parsed.articles?.length || 0) + ' articles');
 
