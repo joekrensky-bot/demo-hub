@@ -429,8 +429,12 @@ function SetupPage(){
   const [loading,setLoading]=useState(false);
   const [loadingMsg,setLoadingMsg]=useState('');
   const [error,setError]=useState('');
-  const [showManual,setShowManual]=useState(false);
-  const [manual,setManual]=useState({brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a'});
+  const [showManual,setShowManual]=useState(true);
+  const [manual,setManual]=useState({
+    companyName:'',logoUrl:'',
+    heroHeadline:'',heroSubheading:'',
+    brandPrimary:'#0f172a',brandAccent:'#6366f1',brandBg:'#f9f7f4',brandText:'#0f172a',
+  });
 
   const steps=[
     '🐱 Wrangling kitties...',
@@ -493,20 +497,75 @@ function SetupPage(){
   };
 
   const handleManual=async()=>{
-    setError('');setLoading(true);setLoadingMsg('✦ Generating content with Jasper...');
+    const co=manual.companyName.trim()||'Content Hub';
+    if(!co){setError('Please enter a company name');return;}
+    setError('');setLoading(true);setLoadingMsg('✦ Generating content with Claude...');
+    const loadSteps=['✦ Generating content with Claude...','✍️ Writing articles...','📰 Writing news items...','🧠 Drafting about page...','🚀 Almost there...'];
+    let si=0;
+    const iv=setInterval(()=>{si=(si+1)%loadSteps.length;setLoadingMsg(loadSteps[si]);},1800);
     try{
-      const companyName=url.trim()?url.trim().replace(/https?:\/\//,'').split('/')[0]:'Content Hub';
-      const res=await fetch('/.netlify/functions/claude-proxy',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:companyName,manual:true})
+      const IMGS=[
+        'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
+        'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
+        'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
+        'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
+        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
+        'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
+      ];
+      const prompt=`You are generating demo content for a branded content hub for a company called "${co}". Return ONLY valid JSON with this exact shape — no markdown, no explanation:
+{
+  "articles":[
+    {"title":"","summary":"","category":"one of Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen-slug"},
+    ... 6 total
+  ],
+  "news":[
+    {"title":"","summary":"","slug":"lowercase-hyphen-slug"},
+    ... 6 total
+  ],
+  "aboutText":"2 paragraphs about the company content hub, professional tone"
+}
+Make titles and summaries feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:1800,
+          messages:[{role:'user',content:prompt}]
+        })
       });
-      if(!res.ok) throw new Error('Proxy '+res.status);
-      const brand=await res.json();
-      if(brand.error) throw new Error(brand.error);
-      updateConfig({...DEFAULT_CONFIG,...manual,brandHeaderText:bestTextColor(manual.brandPrimary),
-        companyName,articles:brand.articles||[],news:brand.news||[],aboutText:brand.aboutText||'',products:brand.products||[]});
+      if(!res.ok){const t=await res.text();throw new Error('Claude API '+res.status+': '+t.slice(0,120));}
+      const data=await res.json();
+      const raw=data.content?.[0]?.text||'{}';
+      const clean=raw.replace(/```json|```/g,'').trim();
+      let parsed={articles:[],news:[],aboutText:''};
+      try{parsed=JSON.parse(clean);}catch(pe){throw new Error('Could not parse Claude response: '+pe.message);}
+      const mkItem=(a,i,t)=>({
+        id:t+'-'+i,title:String(a.title||t+' '+(i+1)),
+        summary:String(a.summary||''),imageUrl:IMGS[i%IMGS.length],
+        slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/,'')||t+'-'+i),
+        category:String(a.category||(t==='news'?'News':'Insights')),
+        readTime:t==='news'?'2 min read':'5 min read',
+        date:new Date(Date.now()-i*86400000*3).toISOString().slice(0,10),
+        body:'<p>'+(a.summary||'Coming soon.')+'</p>',
+        source:'manual',isNew:false,jasperDocId:null,jasperDocUrl:null,
+      });
+      clearInterval(iv);
+      updateConfig({
+        ...DEFAULT_CONFIG,...manual,
+        brandHeaderText:bestTextColor(manual.brandPrimary),
+        companyName:co,
+        logoUrl:manual.logoUrl||'',
+        heroHeadline:manual.heroHeadline||'Insights & Resources',
+        heroSubheading:manual.heroSubheading||'Stay ahead with the latest thinking from our team.',
+        articles:(parsed.articles||[]).slice(0,6).map((a,i)=>mkItem(a,i,'article')),
+        news:(parsed.news||[]).slice(0,6).map((a,i)=>mkItem(a,i,'news')),
+        aboutText:String(parsed.aboutText||''),
+        products:[],generated:false,
+      });
       navigate('/validate');
     }catch(e){
+      clearInterval(iv);
       setError('Error: '+(e.message||String(e)));
       setLoading(false);
     }
@@ -580,43 +639,98 @@ function SetupPage(){
 
           {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:16}}>⚠ {error}</div>}
 
-          {!loading
-            ?<button onClick={handleAnalyze}
-              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'pointer'}}
-              onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
-              ✦ Analyze Site &amp; Build Hub
-            </button>
-            :<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:14,background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:12}}>
-              <div style={{width:20,height:20,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
-              <span style={{fontSize:14,color:'#FF4F00',fontWeight:500}}>{loadingMsg}</span>
+          <div style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:8,padding:'10px 12px',background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:10}}>
+              <span style={{fontSize:14,flexShrink:0}}>&#x1F6A7;</span>
+              <span style={{fontSize:12,color:'#92400e',lineHeight:1.6}}><strong>Under construction</strong> &#8212; URL auto-scrape is temporarily unavailable while we improve timeout handling. Use <strong>manual setup</strong> below for a reliable demo experience.</span>
             </div>
-          }
+            <button disabled
+              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#cbd5e1',color:'#94a3b8',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'not-allowed'}}>
+              &#x2756; Analyze Site &amp; Build Hub
+            </button>
+          </div>
           <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0 12px',color:'#94a3b8',fontSize:13}}>
             <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>or set up manually<div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
           </div>
           <button onClick={()=>setShowManual(v=>!v)} disabled={loading}
             style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:'transparent',border:'1.5px dashed #cbd5e1',color:'#64748b',borderRadius:10,padding:10,fontSize:14,fontFamily:'DM Sans,sans-serif',cursor:'pointer'}}>
-            ⚙ {showManual?'Hide manual setup':'Choose colors manually (Jasper generates content)'}
+            ⚙ {showManual?'Hide manual setup':'Set up manually (recommended)'}
           </button>
           {showManual&&(
             <div style={{marginTop:16,padding:20,background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                {[['Header / Nav','brandPrimary'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
-                  <div key={key}>
-                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>{label}</label>
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <input type="color" value={manual[key]} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
-                        style={{width:36,height:36,borderRadius:8,border:'1.5px solid #e2e8f0',cursor:'pointer',padding:2}}/>
-                      <input type="text" value={manual[key]} maxLength={7} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
-                        style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:12,fontFamily:'monospace',height:36,outline:'none',color:'#374151'}}/>
-                    </div>
+
+              {/* ── Identity ── */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Company</div>
+                <div style={{display:'grid',gap:10}}>
+                  <div>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
+                      Company name <span style={{color:'#ef4444'}}>*</span>
+                    </label>
+                    <input value={manual.companyName} onChange={e=>setManual(p=>({...p,companyName:e.target.value}))}
+                      placeholder="e.g. Acme Corp" disabled={loading}
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
                   </div>
-                ))}
+                  <div>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
+                      Logo URL <span style={{fontSize:11,color:'#94a3b8',fontWeight:400}}>(optional)</span>
+                    </label>
+                    <input value={manual.logoUrl} onChange={e=>setManual(p=>({...p,logoUrl:e.target.value}))}
+                      placeholder="https://acme.com/logo.png" disabled={loading}
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                  </div>
+                </div>
               </div>
-              <button onClick={handleManual} disabled={loading}
-                style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'12px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
-                Generate with Jasper →
-              </button>
+
+              {/* ── Hero Copy ── */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Hero Copy</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginBottom:10}}>Leave blank to auto-generate</div>
+                <div style={{display:'grid',gap:10}}>
+                  <div>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Headline</label>
+                    <input value={manual.heroHeadline} onChange={e=>setManual(p=>({...p,heroHeadline:e.target.value}))}
+                      placeholder="Insights &amp; Resources" disabled={loading}
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Subheading</label>
+                    <input value={manual.heroSubheading} onChange={e=>setManual(p=>({...p,heroSubheading:e.target.value}))}
+                      placeholder="Stay ahead with the latest thinking from our team." disabled={loading}
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Brand Colors ── */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Brand Colors</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  {[['Header / Nav','brandPrimary'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
+                    <div key={key}>
+                      <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>{label}</label>
+                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <input type="color" value={manual[key]} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                          style={{width:36,height:36,borderRadius:8,border:'1.5px solid #e2e8f0',cursor:'pointer',padding:2}}/>
+                        <input type="text" value={manual[key]} maxLength={7} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                          style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:12,fontFamily:'monospace',height:36,outline:'none',color:'#374151',background:'white'}}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Generate button / spinner ── */}
+              {loading
+                ?<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'13px',background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:10}}>
+                  <div style={{width:18,height:18,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
+                  <span style={{fontSize:13,color:'#FF4F00',fontWeight:500}}>{loadingMsg}</span>
+                </div>
+                :<button onClick={handleManual}
+                  style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'13px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  &#x2756; Generate with Claude
+                </button>
+              }
             </div>
           )}
         </div>
