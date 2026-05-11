@@ -34,7 +34,7 @@ const {useState, useEffect, useContext, createContext, useRef, useCallback} = Re
 /* ─── CONSTANTS ─── */
 const JASPER_LOGO_LIGHT = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb2e0705768b531d051_jasper-wordmark-light.svg';
 const JASPER_LOGO_FLAME = 'https://cdn.prod.website-files.com/6807ee8d73c233fb82842313/68438cb209057029cc921078_jasper-wordmark-flame.svg';
-const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=1600&q=80';
+const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&q=80'; // clean modern office/corporate
 
 const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
   heroHeadline:'Insights & Resources',
   heroSubheading:'Stay ahead with the latest thinking from our team.',
   heroImageUrl:DEFAULT_HERO_IMG,
-  fallbackImageUrl:'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=800&q=80',
+  fallbackImageUrl:'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80',
   articles:[],news:[],aboutText:'',products:[],generated:false,theme:'generic',
 };
 
@@ -136,6 +136,24 @@ function getItemImage(slug,category,index){
   const hash=String(slug||index).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
   const seed=Math.abs(hash)+offset+(index*97);
   return `https://picsum.photos/seed/${seed}/800/450`;
+}
+
+/* ─── STRIP MARKDOWN for card previews ─── */
+function stripMd(s){
+  if(!s)return'';
+  return String(s)
+    .replace(/^#{1,6}\s+/gm,'')       // remove # headings
+    .replace(/\*\*\*(.+?)\*\*\*/g,'$1') // bold+italic
+    .replace(/\*\*(.+?)\*\*/g,'$1')   // bold
+    .replace(/\*(.+?)\*/g,'$1')        // italic
+    .replace(/`(.+?)`/g,'$1')          // inline code
+    .replace(/^[-*]\s+/gm,'')          // list bullets
+    .replace(/^\d+\.\s+/gm,'')         // numbered lists
+    .replace(/^>\s*/gm,'')             // blockquotes
+    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1') // links
+    .replace(/<[^>]*>/g,'')            // any html tags
+    .replace(/\n+/g,' ')              // collapse newlines
+    .trim();
 }
 
 function applyBrandVars(c){
@@ -1350,7 +1368,7 @@ function HubLayout({children}){
 }
 
 /* ─── CONTENT CARD ─── */
-function ContentCard({item,basePath,featured=false,size='normal'}){
+function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   const {config}=useHub();
   // Recompute via picsum if stored image is a stale hardcoded Unsplash fallback
   // Trust stored imageUrl only if it came from a real scrape or Unsplash API.
@@ -1359,7 +1377,7 @@ function ContentCard({item,basePath,featured=false,size='normal'}){
   const useStoredImg=item.imageUrl&&REAL_SOURCES.includes(item.source);
   const image=useStoredImg
     ?item.imageUrl
-    :getItemImage(item.slug||item.id,item.category,0);
+    :getItemImage(item.slug||item.id,item.category,index);
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
@@ -1382,7 +1400,7 @@ function ContentCard({item,basePath,featured=false,size='normal'}){
           <span style={{fontSize:12,color:'#94a3b8'}}>{item.readTime||'5 min read'}</span>
         </div>
         <h3 style={{fontSize:featured?22:size==='small'?15:17,fontWeight:600,lineHeight:1.35,color:getThemeStyles(config.theme||'generic',config).forceDark?'#e2e8f0':'#0f172a',marginBottom:8,letterSpacing:'-0.2px'}}>{item.title}</h3>
-        {(featured||size!=='small')&&<p style={{fontSize:14,color:getThemeStyles(config.theme||'generic',config).forceDark?'#94a3b8':'#64748b',lineHeight:1.6,flex:1,marginBottom:12,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{item.summary}</p>}
+        {(featured||size!=='small')&&<p style={{fontSize:14,color:getThemeStyles(config.theme||'generic',config).forceDark?'#94a3b8':'#64748b',lineHeight:1.6,flex:1,marginBottom:12,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{stripMd(item.summary)}</p>}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'auto'}}>
           <span style={{fontSize:12,color:getThemeStyles(config.theme||'generic',config).forceDark?'#64748b':'#94a3b8'}}>{fmtDate(item.date||item.publishedAt)}</span>
           <span style={{fontSize:13,fontWeight:600,color:config.brandAccent}}>Read more →</span>
@@ -1474,14 +1492,14 @@ function DemoHub(){
       <SectionWrap title="Latest Articles" sub="In-depth guides, tutorials, and expert takes" link="#/demo/articles" linkLabel="See all articles →" config={config}
         refreshBtn={<RefreshBtn/>}>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24}}>
-          {merged.map(item=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/articles"/>)}
+          {merged.map((item,i)=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/articles" index={i}/>)}
         </div>
       </SectionWrap>
 
       {/* News */}
       <SectionWrap title="Latest News" sub="Updates, announcements, and industry news" link="#/demo/news" linkLabel="See all news →" config={config} tinted>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24}}>
-          {newsItems.map(item=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/news"/>)}
+          {newsItems.map((item,i)=><ContentCard key={item.id||item.slug} item={item} basePath="/demo/news" index={i}/>)}
         </div>
       </SectionWrap>
 
@@ -1564,7 +1582,7 @@ function ListingPage({type}){
           ))}
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24}}>
-          {filtered.map(item=><ContentCard key={item.id||item.slug} item={item} basePath={basePath}/>)}
+          {filtered.map((item,i)=><ContentCard key={item.id||item.slug} item={item} basePath={basePath} index={i}/>)}
         </div>
       </div>
     </HubLayout>
@@ -1616,7 +1634,7 @@ function DetailPage({slug,type}){
 
       <div style={{maxWidth:1200,margin:'0 auto',padding:'48px 32px',display:'grid',gridTemplateColumns:'1fr 300px',gap:48,alignItems:'start'}}>
         <article>
-          <p style={{fontSize:19,lineHeight:1.7,color:getThemeStyles(config.theme||'generic',config).forceDark?'#cbd5e1':'#374151',marginBottom:32,fontWeight:400,borderLeft:`3px solid ${config.brandAccent}`,paddingLeft:20}}>{item.summary}</p>
+          <p style={{fontSize:19,lineHeight:1.7,color:getThemeStyles(config.theme||'generic',config).forceDark?'#cbd5e1':'#374151',marginBottom:32,fontWeight:400,borderLeft:`3px solid ${config.brandAccent}`,paddingLeft:20}}>{stripMd(item.summary)}</p>
           {(()=>{const ts=getThemeStyles(config.theme||'generic',config);const bodyColor=ts.forceDark?'#cbd5e1':'#374151';const h2Color=ts.forceDark?'#e2e8f0':'#0f172a';const bqBg=ts.forceDark?'#1e2d3d':'#f8fafc';return(
 <div style={{fontSize:16,lineHeight:1.8,color:bodyColor}} dangerouslySetInnerHTML={{__html:body.replace(/<h2>/g,'<h2 style="font-family:DM Serif Display,serif;font-size:26px;color:'+h2Color+';margin:36px 0 14px;">').replace(/<blockquote>/g,'<blockquote style="margin:28px 0;padding:20px 24px;border-left:3px solid '+config.brandAccent+';background:'+bqBg+';border-radius:0 10px 10px 0;font-style:italic;color:'+bodyColor+';">').replace(/<p>/g,'<p style="margin-bottom:20px;">')}}/>
 )})()}
@@ -1639,7 +1657,7 @@ function DetailPage({slug,type}){
           <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px'}}>
             <h2 style={{fontFamily:'DM Serif Display,serif',fontSize:28,marginBottom:24,color:config.brandText||'#0f172a'}}>More {isArticle?'articles':'news'}</h2>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:24}}>
-              {related.map(r=><ContentCard key={r.id||r.slug} item={r} basePath={basePath} size="small"/>)}
+              {related.map((r,i)=><ContentCard key={r.id||r.slug} item={r} basePath={basePath} size="small" index={i}/>)}
             </div>
           </div>
         </div>
