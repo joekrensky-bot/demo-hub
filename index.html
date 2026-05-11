@@ -1353,7 +1353,8 @@ function HubLayout({children}){
 function ContentCard({item,basePath,featured=false,size='normal'}){
   const {config}=useHub();
   // Recompute via picsum if stored image is a stale hardcoded Unsplash fallback
-  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='scraped';
+  // Stale = old hardcoded Unsplash IDs (source not 'unsplash' from API, not 'scraped' real image)
+  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='unsplash'&&item.source!=='scraped'&&item.source!=='firecrawl';
   const image=isStaleUnsplash
     ?getItemImage(item.slug||item.id,item.category,0)
     :(item.imageUrl||config.fallbackImageUrl||getItemImage(item.slug||item.id,item.category,0));
@@ -1583,7 +1584,8 @@ function DetailPage({slug,type}){
   useEffect(()=>{window.scrollTo(0,0);},[slug]);
   if(!item)return null;
 
-  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='scraped';
+  // Stale = old hardcoded Unsplash IDs (source not 'unsplash' from API, not 'scraped' real image)
+  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='unsplash'&&item.source!=='scraped'&&item.source!=='firecrawl';
   const image=isStaleUnsplash
     ?getItemImage(item.slug||item.id,item.category,0)
     :(item.imageUrl||config.fallbackImageUrl||getItemImage(item.slug||item.id,item.category,0));
