@@ -31,45 +31,57 @@ exports.handler = async (event) => {
     _docTitle = String(p.title||'');
     _docContent = String(p.content||'');
     _projectName = String(p.projectName||'');
+    // Override jasperUserId if explicitly passed in push payload
+    if (p.jasperUserId) jasperUserId = String(p.jasperUserId);
+    if (p.userId) jasperUserId = String(p.userId);
   } catch(e) { return { statusCode:400, headers:H, body:JSON.stringify({error:'Bad JSON'}) }; }
 
   // ═══ JASPER WORKSPACE PUSH ═══
   if (_jasperPush) {
     if (!_jasperApiKey) return { statusCode:400, headers:H, body:JSON.stringify({error:'jasperApiKey required'}) };
-    const jHeaders = { 'Content-Type':'application/json', 'X-API-Key': _jasperApiKey };
+    const jH = { 'Content-Type':'application/json', 'X-API-Key': _jasperApiKey };
+    log('Jasper push: action=' + _action + ' userId=' + jasperUserId);
     try {
-      if (_action === 'createProject') {
-        log('Jasper createProject: ' + _projectName);
-        const r = await fetch('https://api.jasper.ai/v1/projects', {
-          method:'POST', headers:jHeaders,
+      // ── Single action: create project + document in one function call ──
+      if (_action === 'pushHeroArticle') {
+        // Step 1: create Canvas project
+        log('Creating project: ' + _projectName);
+        const pRes = await fetch('https://api.jasper.ai/v1/projects', {
+          method:'POST', headers:jH,
           body:JSON.stringify({ userId:jasperUserId, name:_projectName }),
           signal:AbortSignal.timeout(8000),
         });
-        if (!r.ok) { const t=await r.text(); return {statusCode:r.status,headers:H,body:JSON.stringify({error:'Jasper project: '+t.slice(0,200)})}; }
-        const proj = await r.json();
-        log('Project created: ' + (proj.data?.id||proj.id||'?'));
-        const d = proj.data || proj;
-        return { statusCode:200, headers:H, body:JSON.stringify({ id:d.id||'', appUrl:d.appUrl||'' }) };
-      }
-      if (_action === 'createDocument') {
-        log('Jasper createDocument in project: ' + _projectId);
-        const body = { userId:jasperUserId, name:_docTitle, content:_docContent, status:'DRAFT' };
-        if (_projectId) body.projectId = _projectId;
-        const r = await fetch('https://api.jasper.ai/v1/documents', {
-          method:'POST', headers:jHeaders,
-          body:JSON.stringify(body),
+        const pText = await pRes.text();
+        log('Project response: ' + pRes.status + ' ' + pText.slice(0,120));
+        if (!pRes.ok) return { statusCode:pRes.status, headers:H, body:JSON.stringify({error:'Project: '+pText.slice(0,200), _debug:L}) };
+        const pData = JSON.parse(pText);
+        const proj = pData.data || pData;
+        const projectId = proj.id || '';
+        log('Project id: ' + projectId);
+
+        // Step 2: create document inside the project
+        log('Creating document: ' + _docTitle);
+        const docBody = { userId:jasperUserId, name:_docTitle||'Hero Article', content:_docContent, status:'DRAFT' };
+        if (projectId) docBody.projectId = projectId;
+        const dRes = await fetch('https://api.jasper.ai/v1/documents', {
+          method:'POST', headers:jH,
+          body:JSON.stringify(docBody),
           signal:AbortSignal.timeout(8000),
         });
-        if (!r.ok) { const t=await r.text(); return {statusCode:r.status,headers:H,body:JSON.stringify({error:'Jasper doc: '+t.slice(0,200)})}; }
-        const doc = await r.json();
-        log('Document created: ' + (doc.data?.id||doc.id||'?'));
-        const d = doc.data || doc;
-        const appUrl = d.appUrl || (d.id ? `https://app.jasper.ai/canvas/edit/${d.id}` : '');
-        return { statusCode:200, headers:H, body:JSON.stringify({ id:d.id||'', appUrl }) };
+        const dText = await dRes.text();
+        log('Document response: ' + dRes.status + ' ' + dText.slice(0,120));
+        if (!dRes.ok) return { statusCode:dRes.status, headers:H, body:JSON.stringify({error:'Document: '+dText.slice(0,200), _debug:L}) };
+        const dData = JSON.parse(dText);
+        const doc = dData.data || dData;
+        const docId = doc.id || '';
+        const appUrl = doc.appUrl || proj.appUrl || (docId ? `https://app.jasper.ai/canvas/edit/${docId}` : '');
+        log('Done: docId=' + docId + ' appUrl=' + appUrl);
+        return { statusCode:200, headers:H, body:JSON.stringify({ projectId, docId, appUrl, _debug:L }) };
       }
-      return { statusCode:400, headers:H, body:JSON.stringify({error:'unknown action: '+_action}) };
+      return { statusCode:400, headers:H, body:JSON.stringify({error:'unknown action: '+_action, _debug:L}) };
     } catch(err) {
-      return { statusCode:500, headers:H, body:JSON.stringify({error:'Jasper push failed: '+err.message}) };
+      log('Jasper push error: ' + err.message);
+      return { statusCode:500, headers:H, body:JSON.stringify({error:'Jasper push failed: '+err.message, _debug:L}) };
     }
   }
 

@@ -800,7 +800,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       const hero = hp.hero || {};
 
       companyName    = String(p.name || 'Content Hub');
-      logoUrl        = `https://logo.clearbit.com/${(p.homepage_url||'').replace(/https?:\/\//,'').replace(/^www\./,'').split('/')[0]}`;
+      logoUrl        = (()=>{ let raw=(p.homepage_url||'').replace('https://','').replace('http://','').split('/')[0]; raw=raw.replace(/^www\./,''); const parts=raw.split('.'); const domain=parts.length>2?parts.slice(-2).join('.'):raw; return domain?`https://logo.clearbit.com/${domain}`:''; })();
       heroHeadline   = String(hero.headline || 'Insights & Resources');
       heroSubheading = String(hero.description || hero.subheadline || 'Stay ahead with the latest thinking from our team.');
 
@@ -1146,41 +1146,31 @@ function ValidatePage(){
     if(apiKey&&heroArt&&heroArt.body&&heroArt.body.length>50){
       setPushing(true);setPushStatus('pushing');
       try{
-        // 1. Create a project (Canvas) for this company
-        const projRes=await fetch('/.netlify/functions/claude-proxy',{
+        // Single call: create project + document together
+        const cleanBody=heroArt.body.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+        const pushRes=await fetch('/.netlify/functions/claude-proxy',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
             _jasperPush:true,
-            action:'createProject',
+            action:'pushHeroArticle',
             jasperApiKey:apiKey,
-            userId,
+            jasperUserId:userId,
             projectName:local.companyName+' — Content Hub',
+            title:heroArt.title||'Hero Article',
+            content:cleanBody,
           })
         });
-        let jasperDocUrl='';
-        let jasperDocId='';
-        if(projRes.ok){
-          const proj=await projRes.json();
-          const projectId=proj.id||'';
-          // 2. Create document inside the project with hero article content
-          const docRes=await fetch('/.netlify/functions/claude-proxy',{
-            method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({
-              _jasperPush:true,
-              action:'createDocument',
-              jasperApiKey:apiKey,
-              userId,
-              projectId,
-              title:heroArt.title||'Hero Article',
-              content:heroArt.body.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
-            })
-          });
-          if(docRes.ok){
-            const doc=await docRes.json();
-            jasperDocId=doc.id||'';
-            jasperDocUrl=doc.appUrl||`https://app.jasper.ai/canvas/edit/${jasperDocId}`;
-          }
+        const pushData=await pushRes.json();
+        if(!pushRes.ok||pushData.error){
+          console.error('Jasper push error:',pushData.error,pushData._debug);
+          setPushStatus('error');
+          updateConfig({...local,generated:true});
+          setTimeout(()=>navigate('/demo'),0);
+          return;
         }
+        const jasperDocId=pushData.docId||'';
+        const jasperDocUrl=pushData.appUrl||'';
+        console.log('Jasper push success — appUrl:',jasperDocUrl,'debug:',pushData._debug);
         // Update hero article with Jasper doc link
         const updatedArticles=[...(local.articles||[])];
         if(updatedArticles[0]){
@@ -1192,17 +1182,16 @@ function ValidatePage(){
         }
         setPushStatus('done');
         updateConfig({...local,articles:updatedArticles,generated:true});
-        navigate('/demo');
+        setTimeout(()=>navigate('/demo'),0);
       }catch(e){
         setPushStatus('error');
-        console.error('Jasper push error:',e);
-        // Still generate hub even if push fails
+        console.error('Jasper push exception:',e);
         updateConfig({...local,generated:true});
-        navigate('/demo');
+        setTimeout(()=>navigate('/demo'),0);
       }finally{setPushing(false);}
     } else {
       updateConfig({...local,generated:true});
-      navigate('/demo');
+      setTimeout(()=>navigate('/demo'),0);
     }
   };
 
@@ -1528,10 +1517,7 @@ function HubLayout({children}){
                   return(
                     <img src={resolvedLogo} alt={config.companyName}
                       style={{height:28,maxWidth:180,objectFit:'contain',filter:logoFilter}}
-                      onError={e=>{
-                        e.target.style.display='none';
-                        e.target.nextSibling.style.display='block';
-                      }}/>
+                      onError={e=>{ e.target.style.display='none'; try{if(e.target.nextSibling)e.target.nextSibling.style.display='block';}catch(_){} }}/>
                   );
                 })()
               :null
