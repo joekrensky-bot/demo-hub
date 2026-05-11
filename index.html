@@ -128,6 +128,16 @@ function parseMarkdown(raw){
     .replace(/<\/p>\n<p>/g,'</p><p>');
 }
 
+/* ─── IMAGE UTIL ─── */
+function getItemImage(slug,category,index){
+  const CAT_OFFSET={Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
+    Technology:6000,Insights:7000,News:8000,Featured:9000};
+  const offset=CAT_OFFSET[category]||0;
+  const hash=String(slug||index).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
+  const seed=Math.abs(hash)+offset+(index*97);
+  return `https://picsum.photos/seed/${seed}/800/450`;
+}
+
 function applyBrandVars(c){
   const r = document.documentElement;
   r.style.setProperty('--brand-primary', c.brandPrimary);
@@ -715,16 +725,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       rawNews        = parsed.news     || [];
     }
 
-    const getItemImage=(slug,category,idx)=>{
-      // Deterministic seed: slug gives uniqueness, category shifts the seed space
-      const CAT_OFFSET={Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
-        Technology:6000,Insights:7000,News:8000,Featured:9000};
-      const offset=CAT_OFFSET[category]||0;
-      // Hash the slug to a number for stable but varied seeds
-      const hash=String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
-      const seed=Math.abs(hash)+offset+(idx*97);
-      return `https://picsum.photos/seed/${seed}/800/450`;
-    };
+    // getItemImage is a module-level util (see top of file)
     const mkItem=(a,i,t)=>({
       id:t+'-'+i,
       title:String(a.title||t+' '+(i+1)),
@@ -1351,7 +1352,11 @@ function HubLayout({children}){
 /* ─── CONTENT CARD ─── */
 function ContentCard({item,basePath,featured=false,size='normal'}){
   const {config}=useHub();
-  const image=item.imageUrl||config.fallbackImageUrl;
+  // Recompute via picsum if stored image is a stale hardcoded Unsplash fallback
+  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='scraped';
+  const image=isStaleUnsplash
+    ?getItemImage(item.slug||item.id,item.category,0)
+    :(item.imageUrl||config.fallbackImageUrl||getItemImage(item.slug||item.id,item.category,0));
 
   return(
     <a href={`#${basePath}/${item.slug||item.id}`}
@@ -1578,7 +1583,10 @@ function DetailPage({slug,type}){
   useEffect(()=>{window.scrollTo(0,0);},[slug]);
   if(!item)return null;
 
-  const image=item.imageUrl||config.fallbackImageUrl;
+  const isStaleUnsplash=item.imageUrl&&item.imageUrl.includes('images.unsplash.com/photo-')&&item.source!=='scraped';
+  const image=isStaleUnsplash
+    ?getItemImage(item.slug||item.id,item.category,0)
+    :(item.imageUrl||config.fallbackImageUrl||getItemImage(item.slug||item.id,item.category,0));
   const body=parseMarkdown(item.body||`<p>${item.summary}</p><h2>Key insights</h2><p>This ${type} explores the latest developments in ${item.category||'this space'}, offering practical guidance for teams looking to stay ahead.</p><p>From strategy to execution, the ideas here are grounded in real-world experience and informed by industry research and best practices.</p><blockquote><p>"The best content isn't just well-written — it's well-timed, well-placed, and well-measured."</p></blockquote><p>The path forward requires deliberate choices about which tools and platforms to prioritize. This offers a framework for making those decisions with confidence.</p>`);
 
   return(
