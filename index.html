@@ -636,7 +636,6 @@ function SetupPage(){
   const [loading,setLoading]=useState(false);
   const [loadingMsg,setLoadingMsg]=useState('');
   const [error,setError]=useState('');
-  const [showManual,setShowManual]=useState(true);
   const [setupMode,setSetupMode]=useState('manual'); // 'manual' | 'gpt'
   const [gptPaste,setGptPaste]=useState('');
   const [manual,setManual]=useState({
@@ -802,13 +801,34 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       heroHeadline   = String(hero.headline || 'Insights & Resources');
       heroSubheading = String(hero.description || hero.subheadline || 'Stay ahead with the latest thinking from our team.');
 
-      brandPrimary = String(ci.secondary?.hex || ci.primary?.hex || '#0f172a');
-      brandAccent  = String(ci.primary?.hex   || ci.accent?.hex  || '#6366f1');
-      brandBg      = String(ci.background?.hex || '#ffffff');
-      brandText    = String(ci.text?.hex       || '#1c1c1c');
+      // Handle both formats:
+      //   object format: { primary: { hex: '#...' } }  (Cisco-style)
+      //   flat format:   { primary: '#...', dark: '#...', light: '#...' } (EGYM-style)
+      const hexOf = v => typeof v==='string'&&v.startsWith('#') ? v : (v?.hex||null);
+      // For nav/header: prefer 'dark' (flat) or secondary.hex (object), else primary
+      brandPrimary = String(hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
+      // For CTA accent: prefer 'primary' (both formats)
+      brandAccent  = String(hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
+      // For page bg: prefer 'light' (flat) or 'background' (object)
+      brandBg      = String(hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
+      // For body text: prefer 'dark' derived or text color
+      brandText    = String(hexOf(ci.text) || '#1c1c1c');
 
       // blogs → articles, news → news
-      rawArticles = (parsed.blogs  || []).map(b=>({
+      // hero_article → position 0 with full body content
+      const ha = parsed.hero_article || null;
+      const heroArticle = ha ? {
+        title:    String(ha.title || ''),
+        summary:  String(ha.description || ha.content_summary || ''),
+        body:     String(ha.full_content || ha.content_summary || ha.description || ''),
+        slug:     (s=>s&&!s.includes('.')?s:(ha.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60))((ha.url||'').split('/').filter(Boolean).pop()),
+        category: 'Featured',
+        date:     String(ha.date || ''),
+        url:      String(ha.url || ''),
+        readTime: '5 min read',
+      } : null;
+
+      const blogItems = (parsed.blogs || []).map(b=>({
         title:    b.title,
         summary:  b.description,
         slug:     (s=>s&&!s.includes('.')?s:(b.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50))((b.url||'').split('/').filter(Boolean).pop()),
@@ -816,6 +836,11 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
         date:     b.date || '',
         url:      b.url  || '',
       }));
+      // Deduplicate: if hero_article has same slug as first blog, skip that blog
+      const dedupedBlogs = heroArticle
+        ? blogItems.filter(b => b.slug !== heroArticle.slug)
+        : blogItems;
+      rawArticles = heroArticle ? [heroArticle, ...dedupedBlogs] : dedupedBlogs;
       rawNews = (parsed.news || []).map(n=>({
         title:   n.title,
         summary: n.description,
@@ -856,11 +881,15 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     });
 
     const bp = brandPrimary;
+    // hero image: use hero_article image_url if present, else default
+    const heroImgUrl = (parsed.hero_article?.image_url) || '';
+    const bank = CURATED_IMAGES.generic; // will be refined by theme in ValidatePage
     updateConfig({
       ...DEFAULT_CONFIG,
       companyName,logoUrl,heroHeadline,heroSubheading,
       brandPrimary:bp,brandAccent,brandBg,brandText,
       brandHeaderText:bestTextColor(bp),
+      heroImageUrl: heroImgUrl || bank.hero,
       articles:rawArticles.slice(0,6).map((a,i)=>mkItem(a,i,'article')),
       news:rawNews.slice(0,6).map((a,i)=>mkItem(a,i,'news')),
       aboutText,products:[],generated:false,
@@ -872,17 +901,21 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 16px 40px',fontFamily:'DM Sans,sans-serif'}}>
       {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)}/>}
       <div style={{width:'100%',maxWidth:560}}>
+
+        {/* ── Logo pill ── */}
         <div style={{display:'flex',justifyContent:'center',marginBottom:32}}>
           <div style={{display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid #e2e8f0',borderRadius:100,padding:'8px 16px 8px 10px',fontSize:14,fontWeight:600,color:'#0f172a',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
             <JasperIcon size={28}/>Jasper Demo Hub Builder
           </div>
         </div>
+
         <div style={{background:'white',borderRadius:20,padding:'36px 40px',boxShadow:'0 4px 32px rgba(0,0,0,0.08)',border:'1px solid #e2e8f0'}}>
-          {/* Header row with settings cog */}
-          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+
+          {/* ── Header ── */}
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:28}}>
             <div>
               <h1 style={{fontSize:26,fontWeight:600,color:'#0f172a',marginBottom:6,letterSpacing:'-0.3px'}}>Build a branded content hub</h1>
-              <p style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Enter your prospect URL — extract their brand and generate a live demo hub.</p>
+              <p style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Set up with the GPT agent or configure manually below.</p>
             </div>
             <button onClick={()=>setShowSettings(true)} title="Settings"
               style={{width:36,height:36,borderRadius:10,border:'1.5px solid #e2e8f0',background:'#f8fafc',cursor:'pointer',fontSize:16,color:'#64748b',flexShrink:0,marginLeft:12,marginTop:2,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -890,203 +923,177 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
             </button>
           </div>
 
-          {/* Prospect URL */}
-          <div style={{marginBottom:14}}>
-            <label style={{display:'block',fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>Prospect / Customer URL</label>
-            <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
-              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>https://</span>
-              <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!showManual&&handleAnalyze()}
-                placeholder="jasper.ai" disabled={loading}
-                style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
-            </div>
-          </div>
+          {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:20}}>⚠ {error}</div>}
 
-          {/* Article URL to optimize */}
-          <div style={{marginBottom:20}}>
-            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>
-              <span style={{background:'#FF4F00',color:'white',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:4}}>NEW</span>
-              Article URL to optimize in Jasper!
-              <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>— optional</span>
-            </label>
-            <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff',position:'relative'}}>
-              <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>✦</span>
-              <input value={articleUrl} onChange={e=>setArticleUrl(e.target.value)}
-                placeholder="jasper.ai/blog/my-article" disabled={loading}
-                style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
+          {/* ══ SECTION 1: GPT ASSISTED (primary) ══ */}
+          <div style={{marginBottom:28,padding:20,background:'#f0fdf4',borderRadius:14,border:'1.5px solid #86efac'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+              <span style={{fontSize:16}}>🤖</span>
+              <div>
+                <div style={{fontSize:14,fontWeight:600,color:'#15803d'}}>GPT Assisted — recommended</div>
+                <div style={{fontSize:12,color:'#16a34a',marginTop:1}}>Run the agent on any prospect URL, paste the JSON here.</div>
+              </div>
+              <a href="https://chatgpt.com/g/g-6a0221c8ca988191a9c5cdea0e45d57b-website-prospect-extractor" target="_blank" rel="noopener noreferrer"
+                style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:'white',background:'#10a37f',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontFamily:'DM Sans,sans-serif',textDecoration:'none',display:'inline-flex',alignItems:'center',gap:4,flexShrink:0}}>
+                <span style={{fontSize:14}}>&#x2197;</span> Open GPT Agent
+              </a>
             </div>
-            <p style={{fontSize:11,color:'#94a3b8',marginTop:4,lineHeight:1.5}}>This article gets scraped, sent to Jasper as a document, and appears as the featured #1 card in the hub. Edit it in Jasper and publish to update the hub live.</p>
-          </div>
-
-          {/* Analysis mode */}
-          <div style={{marginBottom:20,padding:'14px 16px',background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
-            <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.06em'}}>Analysis mode</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              <button onClick={()=>setScrapeMode('fast')}
-                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
-                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Real content via site map + GPT.</div>
+            <textarea value={gptPaste} onChange={e=>setGptPaste(e.target.value)}
+              placeholder={'Paste JSON from the GPT agent here…'}
+              rows={5} disabled={loading}
+              style={{width:'100%',border:'1.5px solid #bbf7d0',borderRadius:8,padding:'10px 12px',fontSize:12,
+                fontFamily:'monospace',outline:'none',color:'#0f172a',background:'white',resize:'vertical',lineHeight:1.5,marginBottom:10}}/>
+            {loading&&setupMode==='gpt'
+              ?<div style={{display:'flex',alignItems:'center',gap:10,padding:'12px',background:'#f0fdf4',border:'1.5px solid #86efac',borderRadius:10}}>
+                <div style={{width:16,height:16,border:'2px solid #86efac',borderTopColor:'#16a34a',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
+                <span style={{fontSize:13,color:'#15803d',fontWeight:500}}>{loadingMsg}</span>
+              </div>
+              :<button onClick={()=>{setSetupMode('gpt');handleGptPaste();}} disabled={loading||!gptPaste.trim()}
+                style={{width:'100%',background:gptPaste.trim()?'#16a34a':'#cbd5e1',color:'white',border:'none',borderRadius:10,
+                  padding:'12px',fontSize:14,fontWeight:600,cursor:gptPaste.trim()?'pointer':'not-allowed',
+                  fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                🤖 Build Hub from Pasted JSON
               </button>
-              <button onClick={()=>setScrapeMode('deep')}
-                style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-                <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
-                <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full scrape + real images.</div>
-              </button>
-            </div>
+            }
           </div>
 
-          {error&&<div style={{display:'flex',alignItems:'center',gap:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:16}}>⚠ {error}</div>}
-
-          <div style={{marginBottom:16}}>
-            <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:8,padding:'10px 12px',background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:10}}>
-              <span style={{fontSize:14,flexShrink:0}}>&#x1F6A7;</span>
-              <span style={{fontSize:12,color:'#92400e',lineHeight:1.6}}><strong>Under construction</strong> &#8212; URL auto-scrape is temporarily unavailable while we improve timeout handling. Use <strong>manual setup</strong> below for a reliable demo experience.</span>
-            </div>
-            <button disabled
-              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#cbd5e1',color:'#94a3b8',border:'none',borderRadius:12,padding:'14px 24px',fontSize:15,fontWeight:600,cursor:'not-allowed'}}>
-              &#x2756; Analyze Site &amp; Build Hub
-            </button>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0 12px',color:'#94a3b8',fontSize:13}}>
+          {/* ── Divider ── */}
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24,color:'#94a3b8',fontSize:13}}>
             <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
-            <span>or set up without scraping</span>
+            <span>or set up manually</span>
             <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
           </div>
-          {/* Mode tabs */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:showManual?0:0}}>
-            <button onClick={()=>{setSetupMode('manual');setShowManual(true);}} disabled={loading}
-              style={{padding:'10px 12px',borderRadius:10,border:setupMode==='manual'?'2px solid #FF4F00':'1.5px solid #e2e8f0',
-                background:setupMode==='manual'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-              <div style={{fontSize:13,fontWeight:600,color:setupMode==='manual'?'#FF4F00':'#374151',marginBottom:2}}>⚙ Manual</div>
-              <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Pick colors, Claude generates content.</div>
-            </button>
-            <button onClick={()=>{setSetupMode('gpt');setShowManual(true);}} disabled={loading}
-              style={{padding:'10px 12px',borderRadius:10,border:setupMode==='gpt'?'2px solid #6366f1':'1.5px solid #e2e8f0',
-                background:setupMode==='gpt'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
-              <div style={{fontSize:13,fontWeight:600,color:setupMode==='gpt'?'#6366f1':'#374151',marginBottom:2}}>🤖 GPT Assisted</div>
-              <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Run a prompt in ChatGPT, paste results.</div>
-            </button>
-          </div>
-          {showManual&&(
-            <div style={{marginTop:8,padding:20,background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
-            {setupMode==='gpt'?(
-              <div>
-                {/* ── GPT Prompt to copy ── */}
-                <div style={{marginBottom:14}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                    <div>
-                      <label style={{fontSize:12,fontWeight:600,color:'#374151'}}>Step 1 — Run the GPT agent, then paste results below</label>
-                      <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-                        <a href="https://chatgpt.com/g/g-6a0221c8ca988191a9c5cdea0e45d57b-website-prospect-extractor" target="_blank" rel="noopener noreferrer"
-                          style={{fontSize:11,fontWeight:600,color:'white',background:'#10a37f',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif',textDecoration:'none',display:'inline-flex',alignItems:'center',gap:4}}>
-                          <span style={{fontSize:13}}>&#x2197;</span> Open GPT Agent
-                        </a>
-                        <span style={{fontSize:11,color:'#94a3b8'}}>or</span>
-                        <button onClick={()=>navigator.clipboard.writeText(GPT_PROMPT)}
-                          style={{fontSize:11,fontWeight:600,color:'#6366f1',background:'#eef2ff',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
-                          Copy manual prompt
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <pre style={{fontSize:10.5,color:'#475569',background:'white',border:'1px solid #e2e8f0',borderRadius:8,
-                    padding:'10px 12px',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.6,maxHeight:140,overflowY:'auto',
-                    fontFamily:'monospace',margin:0}}>{GPT_PROMPT}</pre>
-                </div>
-                {/* ── Paste area ── */}
-                <div style={{marginBottom:14}}>
-                  <label style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:6,display:'block'}}>Step 2 — Paste the JSON response here</label>
-                  <textarea value={gptPaste} onChange={e=>setGptPaste(e.target.value)}
-                    placeholder={'{ "companyName": "Acme", "articles": [...], ... }'}
-                    rows={6} disabled={loading}
-                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'10px 12px',fontSize:12,
-                      fontFamily:'monospace',outline:'none',color:'#0f172a',background:'white',resize:'vertical',lineHeight:1.5}}/>
-                </div>
-                <button onClick={handleGptPaste} disabled={loading||!gptPaste.trim()}
-                  style={{width:'100%',background:gptPaste.trim()?'#6366f1':'#cbd5e1',color:'white',border:'none',borderRadius:10,
-                    padding:'13px',fontSize:14,fontWeight:600,cursor:gptPaste.trim()?'pointer':'not-allowed',
-                    fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                  🤖 Build Hub from Pasted JSON
-                </button>
-              </div>
-            ):(
-              <div>
-              {/* ── Identity ── */}
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Company</div>
-                <div style={{display:'grid',gap:10}}>
-                  <div>
-                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
-                      Company name <span style={{color:'#ef4444'}}>*</span>
-                    </label>
-                    <input value={manual.companyName} onChange={e=>setManual(p=>({...p,companyName:e.target.value}))}
-                      placeholder="e.g. Acme Corp" disabled={loading}
-                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
-                      Logo URL <span style={{fontSize:11,color:'#94a3b8',fontWeight:400}}>(optional)</span>
-                    </label>
-                    <input value={manual.logoUrl} onChange={e=>setManual(p=>({...p,logoUrl:e.target.value}))}
-                      placeholder="https://acme.com/logo.png" disabled={loading}
-                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
-                  </div>
-                </div>
-              </div>
 
-              {/* ── Hero Copy ── */}
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Hero Copy</div>
-                <div style={{fontSize:11,color:'#94a3b8',marginBottom:10}}>Leave blank to auto-generate</div>
-                <div style={{display:'grid',gap:10}}>
-                  <div>
-                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Headline</label>
-                    <input value={manual.heroHeadline} onChange={e=>setManual(p=>({...p,heroHeadline:e.target.value}))}
-                      placeholder="Insights &amp; Resources" disabled={loading}
-                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Subheading</label>
-                    <input value={manual.heroSubheading} onChange={e=>setManual(p=>({...p,heroSubheading:e.target.value}))}
-                      placeholder="Stay ahead with the latest thinking from our team." disabled={loading}
-                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
-                  </div>
-                </div>
-              </div>
+          {/* ══ SECTION 2: MANUAL SETUP ══ */}
+          <div style={{marginBottom:28}}>
 
-              {/* ── Brand Colors ── */}
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Brand Colors</div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                  {[['Header / Nav','brandPrimary'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
-                    <div key={key}>
-                      <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>{label}</label>
-                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                        <input type="color" value={manual[key]} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
-                          style={{width:36,height:36,borderRadius:8,border:'1.5px solid #e2e8f0',cursor:'pointer',padding:2}}/>
-                        <input type="text" value={manual[key]} maxLength={7} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
-                          style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:12,fontFamily:'monospace',height:36,outline:'none',color:'#374151',background:'white'}}/>
-                      </div>
-                    </div>
-                  ))}
+            {/* Company */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Company</div>
+              <div style={{display:'grid',gap:10}}>
+                <div>
+                  <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
+                    Company name <span style={{color:'#ef4444'}}>*</span>
+                  </label>
+                  <input value={manual.companyName} onChange={e=>setManual(p=>({...p,companyName:e.target.value}))}
+                    placeholder="e.g. Acme Corp" disabled={loading}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>
+                    Logo URL <span style={{fontSize:11,color:'#94a3b8',fontWeight:400}}>(optional)</span>
+                  </label>
+                  <input value={manual.logoUrl} onChange={e=>setManual(p=>({...p,logoUrl:e.target.value}))}
+                    placeholder="https://acme.com/logo.png" disabled={loading}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
                 </div>
               </div>
-
-              {/* ── Generate button / spinner ── */}
-              {loading
-                ?<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'13px',background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:10}}>
-                  <div style={{width:18,height:18,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
-                  <span style={{fontSize:13,color:'#FF4F00',fontWeight:500}}>{loadingMsg}</span>
-                </div>
-                :<button onClick={handleManual}
-                  style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'13px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                  &#x2756; Generate with Claude
-                </button>
-              }
-              </div>
-            )}
             </div>
-          )}
+
+            {/* Hero Copy */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Hero Copy</div>
+              <div style={{fontSize:11,color:'#94a3b8',marginBottom:10}}>Leave blank to auto-generate</div>
+              <div style={{display:'grid',gap:10}}>
+                <div>
+                  <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Headline</label>
+                  <input value={manual.heroHeadline} onChange={e=>setManual(p=>({...p,heroHeadline:e.target.value}))}
+                    placeholder="Insights &amp; Resources" disabled={loading}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Subheading</label>
+                  <input value={manual.heroSubheading} onChange={e=>setManual(p=>({...p,heroSubheading:e.target.value}))}
+                    placeholder="Stay ahead with the latest thinking from our team." disabled={loading}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 12px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:38,outline:'none',color:'#0f172a',background:'white'}}/>
+                </div>
+              </div>
+            </div>
+
+            {/* Brand Colors */}
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Brand Colors</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}> 
+                {[['Header / Nav','brandPrimary'],['Accent / CTA','brandAccent'],['Page background','brandBg'],['Body text','brandText']].map(([label,key])=>(
+                  <div key={key}>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>{label}</label>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <input type="color" value={manual[key]} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                        style={{width:36,height:36,borderRadius:8,border:'1.5px solid #e2e8f0',cursor:'pointer',padding:2}}/>
+                      <input type="text" value={manual[key]} maxLength={7} onChange={e=>setManual(p=>({...p,[key]:e.target.value}))}
+                        style={{flex:1,border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:12,fontFamily:'monospace',height:36,outline:'none',color:'#374151',background:'white'}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Generate button */}
+            {loading&&setupMode==='manual'
+              ?<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'13px',background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:10}}>
+                <div style={{width:18,height:18,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
+                <span style={{fontSize:13,color:'#FF4F00',fontWeight:500}}>{loadingMsg}</span>
+              </div>
+              :<button onClick={()=>{setSetupMode('manual');handleManual();}} disabled={loading}
+                style={{width:'100%',background:'#FF4F00',color:'white',border:'none',borderRadius:10,padding:'13px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                &#x2756; Generate with Claude
+              </button>
+            }
+          </div>
+
+          {/* ══ SECTION 3: URL SCRAPE (collapsed, under construction) ══ */}
+          <details style={{marginTop:4}}>
+            <summary style={{fontSize:12,color:'#94a3b8',cursor:'pointer',userSelect:'none',listStyle:'none',display:'flex',alignItems:'center',gap:6,paddingTop:12,borderTop:'1px solid #f1f5f9'}}>
+              <span style={{fontSize:11}}>▸</span> URL auto-scrape <span style={{background:'#fef3c7',color:'#92400e',fontSize:10,fontWeight:600,padding:'1px 6px',borderRadius:4,marginLeft:4}}>Under construction</span>
+            </summary>
+            <div style={{marginTop:14}}>
+              <div style={{marginBottom:14}}>
+                <label style={{display:'block',fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>Prospect / Customer URL</label>
+                <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
+                  <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>https://</span>
+                  <input value={url} onChange={e=>setUrl(e.target.value)}
+                    placeholder="jasper.ai" disabled={loading}
+                    style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:15,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
+                </div>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:500,color:'#374151',marginBottom:6}}>
+                  <span style={{background:'#FF4F00',color:'white',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:4}}>NEW</span>
+                  Article URL to optimize in Jasper!
+                  <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>— optional</span>
+                </label>
+                <div style={{display:'flex',alignItems:'center',border:'1.5px solid #e2e8f0',borderRadius:10,overflow:'hidden',background:'#fff'}}>
+                  <span style={{padding:'0 10px',fontSize:14,color:'#94a3b8',background:'#f8fafc',borderRight:'1.5px solid #e2e8f0',height:44,display:'flex',alignItems:'center',flexShrink:0}}>✦</span>
+                  <input value={articleUrl} onChange={e=>setArticleUrl(e.target.value)}
+                    placeholder="jasper.ai/blog/my-article" disabled={loading}
+                    style={{flex:1,border:'none',outline:'none',padding:'0 14px',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'#0f172a',height:44,background:'transparent'}}/>
+                </div>
+                <p style={{fontSize:11,color:'#94a3b8',marginTop:4,lineHeight:1.5}}>This article gets scraped, sent to Jasper as a document, and appears as the featured #1 card in the hub.</p>
+              </div>
+              <div style={{marginBottom:14,padding:'12px 14px',background:'#f8fafc',borderRadius:10,border:'1px solid #e2e8f0'}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Analysis mode</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <button onClick={()=>setScrapeMode('fast')}
+                    style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='fast'?'2px solid #FF4F00':'1.5px solid #e2e8f0',background:scrapeMode==='fast'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif'}}>
+                    <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='fast'?'#FF4F00':'#374151',marginBottom:2}}>⚡ Fast</div>
+                    <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Real content via site map + GPT.</div>
+                  </button>
+                  <button onClick={()=>setScrapeMode('deep')}
+                    style={{padding:'10px 12px',borderRadius:10,border:scrapeMode==='deep'?'2px solid #6366f1':'1.5px solid #e2e8f0',background:scrapeMode==='deep'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif'}}>
+                    <div style={{fontSize:13,fontWeight:600,color:scrapeMode==='deep'?'#6366f1':'#374151',marginBottom:2}}>🔬 Deep</div>
+                    <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Full scrape + real images.</div>
+                  </button>
+                </div>
+              </div>
+              <button disabled
+                style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#cbd5e1',color:'#94a3b8',border:'none',borderRadius:12,padding:'13px 24px',fontSize:15,fontWeight:600,cursor:'not-allowed'}}>
+                &#x2756; Analyze Site &amp; Build Hub
+              </button>
+            </div>
+          </details>
+
         </div>
+
         <p style={{textAlign:'center',marginTop:24,fontSize:13,color:'#94a3b8'}}>
           ⚡ Powered by <strong style={{color:'#FF4F00'}}>Jasper AI</strong>
           {' · '}<button onClick={()=>{localStorage.clear();window.location.reload();}}
@@ -1140,9 +1147,9 @@ function ValidatePage(){
 
         {/* Tabs */}
         <div style={{display:'flex',gap:2,padding:'12px 16px',borderBottom:'1px solid #e2e8f0'}}>
-          {[['brand','🎨 Brand'],['content','📄 Content']].map(([id,label])=>(
+          {[['brand','🎨 Brand'],['hero','⭐ Hero Article'],['content','📄 Content']].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)}
-              style={{flex:1,padding:'8px 4px',fontSize:13,fontFamily:'DM Sans,sans-serif',border:'none',borderRadius:8,cursor:'pointer',
+              style={{flex:1,padding:'8px 4px',fontSize:12,fontFamily:'DM Sans,sans-serif',border:'none',borderRadius:8,cursor:'pointer',
                 background:tab===id?'#eef2ff':'transparent',color:tab===id?'#6366f1':'#64748b',fontWeight:tab===id?500:400}}>
               {label}
             </button>
@@ -1197,6 +1204,61 @@ function ValidatePage(){
               <TF label="Fallback image URL" value={local.fallbackImageUrl} onChange={set('fallbackImageUrl')} hint="Used when article has no image"/>
             </Section>
           </>}
+
+          {tab==='hero'&&(()=>{
+            const hero=local.articles?.[0]||{};
+            const setHero=updated=>{
+              const next=[...( local.articles||[])];
+              next[0]=updated;
+              set('articles')(next);
+            };
+            return(
+              <div>
+                <div style={{marginBottom:16,padding:'10px 12px',background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'#c2410c',marginBottom:2}}>⭐ Position 1 — Hero Article</div>
+                  <div style={{fontSize:11,color:'#ea580c',lineHeight:1.5}}>This is the first article card on your hub. Edit it here before publishing — it will appear as the featured item in the articles grid.</div>
+                </div>
+
+                <Section title="Article content">
+                  <TF label="Title" value={hero.title||''} onChange={v=>setHero({...hero,title:v})}/>
+                  <TF label="Summary" value={hero.summary||''} onChange={v=>setHero({...hero,summary:v})} multiline/>
+                  <div style={{marginBottom:12}}>
+                    <label style={{fontSize:12,fontWeight:500,color:'#374151',marginBottom:5,display:'block'}}>Category</label>
+                    <select value={hero.category||'Insights'} onChange={e=>setHero({...hero,category:e.target.value})}
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'0 10px',fontSize:13,fontFamily:'DM Sans,sans-serif',height:36,outline:'none',color:'#0f172a',background:'white'}}>
+                      {['Marketing','AI','Strategy','Growth','Content','Technology','Insights','News','Featured'].map(cat=>(
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <TF label="Read time" value={hero.readTime||'5 min read'} onChange={v=>setHero({...hero,readTime:v})}/>
+                  <TF label="Date" value={hero.date||''} onChange={v=>setHero({...hero,date:v})} hint="YYYY-MM-DD"/>
+                </Section>
+
+                <Section title="Article body">
+                  <div style={{fontSize:11,color:'#94a3b8',marginBottom:8,lineHeight:1.5}}>Supports markdown — use ## for headings, **bold**, *italic*, &gt; blockquotes, - lists.</div>
+                  <textarea value={hero.body||''} onChange={e=>setHero({...hero,body:e.target.value})}
+                    placeholder="Full article body (markdown or HTML)..."
+                    rows={10}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'10px 12px',fontSize:12,
+                      fontFamily:'monospace',outline:'none',color:'#0f172a',background:'white',resize:'vertical',lineHeight:1.6}}/>
+                </Section>
+
+                <Section title="Hero image">
+                  {hero.imageUrl&&<div style={{marginBottom:10,borderRadius:8,overflow:'hidden',border:'1px solid #e2e8f0',height:140}}>
+                    <img src={hero.imageUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} onError={e=>e.target.style.display='none'}/>
+                  </div>}
+                  <TF label="Image URL" value={hero.imageUrl||''} onChange={v=>setHero({...hero,imageUrl:v,imageSource:'manual'})} hint="Optional"/>
+                  <div style={{fontSize:11,color:'#94a3b8',marginTop:-4}}>Leave as-is to use the curated theme image, or paste any direct image URL.</div>
+                </Section>
+
+                <Section title="Jasper document">
+                  <div style={{fontSize:11,color:'#94a3b8',marginBottom:8,lineHeight:1.5}}>If this article was created in Jasper and published to Contentful, it will automatically appear in position 1 with a "New from Jasper" badge.</div>
+                  <TF label="Jasper doc URL" value={hero.jasperDocUrl||''} onChange={v=>setHero({...hero,jasperDocUrl:v})} hint="Optional"/>
+                </Section>
+              </div>
+            );
+          })()}
 
           {tab==='content'&&<>
             <Section title={`Articles (${local.articles?.length||0})`}>
