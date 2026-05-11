@@ -1,4 +1,10 @@
-<!DOCTYPE html>
+        <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0'}}>
+          <button onClick={handleGenerate}
+            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#0f172a',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
+            onMouseOver={e=>e.currentTarget.style.background='#1e293b'} onMouseOut={e=>e.currentTarget.style.background='#0f172a'}>
+            🚀 Generate Hub
+          </button>
+        </div><!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -41,7 +47,7 @@ const DEFAULT_CONFIG = {
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
   jasperApiKey:'',
-  workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hubpush',
+  workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hero-article-push',
   prospectUrl:'',articleUrl:'',
   brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
   brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
@@ -1153,7 +1159,7 @@ function ValidatePage(){
   const [pushUserId,setPushUserId]=useState(local.jasperUserId||config.jasperUserId||'');
   const [pushWebhookUrl,setPushWebhookUrl]=useState(
     local.workatoWebhookUrl||config.workatoWebhookUrl||
-    'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hubpush'
+    'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hero-article-push'
   );
 
   const handleJasperPush=async()=>{
@@ -1341,6 +1347,60 @@ function ValidatePage(){
                   <div style={{fontSize:11,color:'#94a3b8',marginBottom:8,lineHeight:1.5}}>If this article was created in Jasper and published to Contentful, it will automatically appear in position 1 with a "New from Jasper" badge.</div>
                   <TF label="Jasper doc URL" value={hero.jasperDocUrl||''} onChange={v=>setHero({...hero,jasperDocUrl:v})} hint="Optional"/>
                 </Section>
+
+                {/* ── Push to Jasper panel — lives here so it's only visible on the Hero Article tab ── */}
+                <div style={{marginTop:8,padding:'14px 16px',background:'#fafafa',borderRadius:12,border:'1px solid #e2e8f0'}}>
+                  <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Push hero article to Jasper</div>
+
+                  <div style={{marginBottom:8}}>
+                    <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>Workato webhook URL</label>
+                    <input value={pushWebhookUrl} onChange={e=>setPushWebhookUrl(e.target.value)}
+                      placeholder="https://webhooks.workato.com/webhooks/rest/…/hero-article-push"
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
+                  </div>
+
+                  <div style={{marginBottom:10}}>
+                    <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>
+                      Jasper User ID <span style={{fontSize:10,color:'#94a3b8',fontWeight:400}}>— usr_XXXX format</span>
+                    </label>
+                    <input value={pushUserId} onChange={e=>setPushUserId(e.target.value)}
+                      placeholder="usr_11E2B663A25C4A40A1C470A2BCA97898"
+                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
+                  </div>
+
+                  {pushStatus&&pushStatus.startsWith('error')&&(
+                    <div style={{marginBottom:8,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:7,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all',lineHeight:1.5}}>
+                      ⚠ {pushStatus.replace('error:','')}
+                    </div>
+                  )}
+                  {pushStatus&&pushStatus.startsWith('exception')&&(
+                    <div style={{marginBottom:8,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:7,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all'}}>
+                      ⚠ {pushStatus.replace('exception:','')}
+                    </div>
+                  )}
+                  {pushStatus&&pushStatus.startsWith('done')&&(
+                    <div style={{marginBottom:8,padding:'8px 10px',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:7,fontSize:11,color:'#15803d',lineHeight:1.5}}>
+                      ✓ {pushStatus.replace('done:','')||'Pushed to Jasper workspace'}
+                      {pushStatus.replace('done:','').startsWith('http')&&(
+                        <a href={pushStatus.replace('done:','')} target="_blank" rel="noopener noreferrer"
+                          style={{display:'block',marginTop:4,color:'#0369a1',textDecoration:'underline',fontSize:10}}>
+                          Open in Jasper →
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {pushing
+                    ?<div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'#fff7f5',border:'1px solid #fed7c3',borderRadius:8}}>
+                      <div style={{width:14,height:14,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite',flexShrink:0}}></div>
+                      <span style={{fontSize:12,color:'#FF4F00',fontWeight:500}}>{typeof pushStatus==='string'&&pushStatus!=='pushing'?pushStatus:'Sending to Workato…'}</span>
+                    </div>
+                    :<button onClick={handleJasperPush}
+                      style={{width:'100%',padding:'9px',background:'#FF4F00',color:'white',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                      ✦ Push Hero Article to Jasper
+                    </button>
+                  }
+                </div>
               </div>
             );
           })()}
@@ -1369,64 +1429,6 @@ function ValidatePage(){
         </div>
 
         <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0',display:'flex',flexDirection:'column',gap:10}}>
-
-          {/* ── Jasper push panel ── */}
-          <div style={{padding:'14px 16px',background:'#fafafa',borderRadius:12,border:'1px solid #e2e8f0'}}>
-            <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Push hero article to Jasper</div>
-
-            {/* Webhook URL */}
-            <div style={{marginBottom:8}}>
-              <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>Workato webhook URL</label>
-              <input value={pushWebhookUrl} onChange={e=>setPushWebhookUrl(e.target.value)}
-                placeholder="https://webhooks.workato.com/webhooks/rest/…/hubpush"
-                style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
-            </div>
-
-            {/* User ID */}
-            <div style={{marginBottom:10}}>
-              <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>
-                Jasper User ID <span style={{fontSize:10,color:'#94a3b8',fontWeight:400}}>— usr_XXXX format</span>
-              </label>
-              <input value={pushUserId} onChange={e=>setPushUserId(e.target.value)}
-                placeholder="usr_11E2B663A25C4A40A1C470A2BCA97898"
-                style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
-            </div>
-
-            {/* Status messages */}
-            {pushStatus&&pushStatus.startsWith('error')&&(
-              <div style={{marginBottom:8,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:7,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all',lineHeight:1.5}}>
-                ⚠ {pushStatus.replace('error:','')}
-              </div>
-            )}
-            {pushStatus&&pushStatus.startsWith('exception')&&(
-              <div style={{marginBottom:8,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:7,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all'}}>
-                ⚠ {pushStatus.replace('exception:','')}
-              </div>
-            )}
-            {pushStatus&&pushStatus.startsWith('done')&&(
-              <div style={{marginBottom:8,padding:'8px 10px',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:7,fontSize:11,color:'#15803d',lineHeight:1.5}}>
-                ✓ {pushStatus.replace('done:','')||'Pushed to Jasper workspace'}
-                {pushStatus.replace('done:','').startsWith('http')&&(
-                  <a href={pushStatus.replace('done:','')} target="_blank" rel="noopener noreferrer"
-                    style={{display:'block',marginTop:4,color:'#0369a1',textDecoration:'underline',fontSize:10}}>
-                    Open in Jasper →
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* Push button */}
-            {pushing
-              ?<div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'#fff7f5',border:'1px solid #fed7c3',borderRadius:8}}>
-                <div style={{width:14,height:14,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite',flexShrink:0}}></div>
-                <span style={{fontSize:12,color:'#FF4F00',fontWeight:500}}>{typeof pushStatus==='string'&&pushStatus!=='pushing'?pushStatus:'Sending to Workato…'}</span>
-              </div>
-              :<button onClick={handleJasperPush} disabled={pushing}
-                style={{width:'100%',padding:'9px',background:'#FF4F00',color:'white',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                ✦ Push Hero Article to Jasper
-              </button>
-            }
-          </div>
 
           {/* ── Generate hub button ── */}
           <button onClick={handleGenerate}
