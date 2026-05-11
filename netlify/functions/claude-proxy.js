@@ -29,14 +29,15 @@ exports.handler = async (event) => {
   if (manual) {
     log('MANUAL mode for: ' + url);
 
-    const IMGS = [
-      'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
-      'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
-      'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
-      'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
-      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-      'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
-    ];
+
+    const getItemImage = (slug, category, idx) => {
+      const CAT_OFFSET = {Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
+        Technology:6000,Insights:7000,News:8000,Featured:9000};
+      const offset = CAT_OFFSET[category] || 0;
+      const hash = String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0, 0);
+      const seed = Math.abs(hash) + offset + (idx * 97);
+      return `https://picsum.photos/seed/${seed}/800/450`;
+    };
 
     try {
       const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
@@ -119,8 +120,8 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
         id: t + '-' + i,
         title: String(a.title || t + ' ' + (i + 1)),
         summary: String(a.summary || ''),
-        imageUrl: IMGS[i % IMGS.length],
-        imageSource: 'fallback',
+        imageUrl: getItemImage(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
+        imageSource: 'picsum',
         slug: String(a.slug || (a.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || t + '-' + i),
         category: String(a.category || (t === 'news' ? 'News' : 'Insights')),
         readTime: t === 'news' ? '2 min read' : '5 min read',
@@ -156,20 +157,14 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
   const domain = clean.replace(/https?:\/\//,'').split('/')[0];
   log('START '+domain+' art='+(articleUrl||'none'));
 
-  const IMGS = [
-    'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
-    'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
-    'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
-    'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
-    'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-    'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80',
-    'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80',
-    'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80',
-    'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80',
-    'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&q=80',
-    'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80',
-  ];
+  const getItemImage = (slug, category, idx) => {
+    const CAT_OFFSET = {Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
+      Technology:6000,Insights:7000,News:8000,Featured:9000};
+    const offset = CAT_OFFSET[category] || 0;
+    const hash = String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0, 0);
+    const seed = Math.abs(hash) + offset + (idx * 97);
+    return `https://picsum.photos/seed/${seed}/800/450`;
+  };
 
   // ── Helper: og scrape ──
   const ogScrape = async (u, ms=2500) => {
@@ -313,7 +308,7 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
 
     const mi = (a,i,t) => ({
       id:t+'-'+i, title:String(a.title||t+' '+(i+1)), summary:String(a.summary||''),
-      imageUrl: a.imageUrl || (realArticles[i]?.image) || IMGS[i%IMGS.length],
+      imageUrl: a.imageUrl || (realArticles[i]?.image) || getItemImage(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
       imageSource: a.imageUrl?(a.imageSource||'firecrawl'):(realArticles[i]?.image?'firecrawl':'fallback'),
       slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
       category:String(a.category||(t==='news'?'News':'Insights')),
