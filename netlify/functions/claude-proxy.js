@@ -12,6 +12,7 @@ exports.handler = async (event) => {
   const OK = process.env.OPENAI_API_KEY;
   const FK = process.env.FIRECRAWL_API_KEY;
   const JK = process.env.JASPER_API_KEY;
+  const UK = process.env.UNSPLASH_ACCESS_KEY;
   if (!OK) return { statusCode: 500, headers: H, body: JSON.stringify({ error: 'No OPENAI key' }) };
 
   const T = Date.now(), L = [], log = m => { const e = `[${Date.now()-T}ms] ${m}`; console.log(e); L.push(e); };
@@ -26,18 +27,51 @@ exports.handler = async (event) => {
   if (!url) return { statusCode:400, headers:H, body:JSON.stringify({error:'url required'}) };
 
   // ═══ MANUAL MODE: Jasper Command API generates content ═══
+  // ── Unsplash: fetch one photo per category keyword, picsum fallback ──
+  const CAT_KEYWORDS = {
+    Marketing:'marketing creative campaign',AI:'artificial intelligence technology',
+    Strategy:'business strategy planning',Growth:'growth success chart',
+    Content:'content writing media',Technology:'technology innovation',
+    Insights:'data analytics insight',News:'news media journalism',
+    Featured:'hero abstract professional',health:'healthcare medical science',
+    finserv:'finance banking corporate',ecommerce:'retail shopping lifestyle',
+    default:'office professional team',
+  };
+  const picsumFallback = (slug, category, idx) => {
+    const offsets = {Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
+      Technology:6000,Insights:7000,News:8000,Featured:9000};
+    const offset = offsets[category]||0;
+    const hash = String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
+    return `https://picsum.photos/seed/${Math.abs(hash)+offset+(idx*97)}/800/450`;
+  };
+  // Fetch a pool of Unsplash photos per keyword — one call per category, 6 photos each
+  const unsplashPool = {}; // category → [url, url, ...]
+  const fetchUnsplashCategory = async (category) => {
+    if (!UK || unsplashPool[category]) return;
+    const kw = encodeURIComponent(CAT_KEYWORDS[category] || CAT_KEYWORDS.default);
+    try {
+      const r = await fetch(
+        `https://api.unsplash.com/photos/random?query=${kw}&count=6&orientation=landscape&client_id=${UK}`,
+        { signal: AbortSignal.timeout(4000) }
+      );
+      if (!r.ok) { log('Unsplash ' + category + ' ' + r.status); return; }
+      const photos = await r.json();
+      unsplashPool[category] = (Array.isArray(photos) ? photos : [photos])
+        .map(p => p.urls?.regular || p.urls?.small || '').filter(Boolean);
+      log('Unsplash ' + category + ': ' + unsplashPool[category].length + ' photos');
+    } catch(e) { log('Unsplash err ' + category + ': ' + e.message); }
+  };
+  const getUnsplashImg = (slug, category, idx) => {
+    const pool = unsplashPool[category] || unsplashPool.default || [];
+    if (pool.length) return pool[idx % pool.length] + '&w=800&q=80';
+    return picsumFallback(slug, category, idx);
+  };
+
   if (manual) {
     log('MANUAL mode for: ' + url);
 
 
-    const getItemImage = (slug, category, idx) => {
-      const CAT_OFFSET = {Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
-        Technology:6000,Insights:7000,News:8000,Featured:9000};
-      const offset = CAT_OFFSET[category] || 0;
-      const hash = String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0, 0);
-      const seed = Math.abs(hash) + offset + (idx * 97);
-      return `https://picsum.photos/seed/${seed}/800/450`;
-    };
+    // images handled by module-level getUnsplashImg / picsumFallback
 
     try {
       const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
@@ -116,12 +150,32 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
       while (arts.length < 6) arts.push(ph('article', arts.length));
       while (nws.length  < 6) nws.push(ph('news', nws.length));
 
+      // Fetch Unsplash image pools for each unique category in the content
+      const uniqueCats = [...new Set([
+        ...(arts.map(a => a.category||'Insights')),
+        ...(nws.map(n => 'News')),
+        'Featured',
+      ])];
+      await Promise.all(uniqueCats.map(cat => fetchUnsplashCategory(cat)));
+      // Also fetch a hero image for this company
+      const heroKw = CAT_KEYWORDS[uniqueCats[0]] || CAT_KEYWORDS.default;
+      let heroImageUrl = '';
+      if (UK) {
+        try {
+          const hr = await fetch(
+            `https://api.unsplash.com/photos/random?query=${encodeURIComponent(co+' '+heroKw)}&orientation=landscape&client_id=${UK}`,
+            { signal: AbortSignal.timeout(4000) }
+          );
+          if (hr.ok) { const hp = await hr.json(); heroImageUrl = (hp.urls?.full || hp.urls?.regular || '') + '&w=1600&q=85'; log('Hero image OK'); }
+        } catch(e) { log('Hero img err: ' + e.message); }
+      }
+
       const mkItem = (a, i, t) => ({
         id: t + '-' + i,
         title: String(a.title || t + ' ' + (i + 1)),
         summary: String(a.summary || ''),
-        imageUrl: getItemImage(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
-        imageSource: 'picsum',
+        imageUrl: getUnsplashImg(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
+        imageSource: UK ? 'unsplash' : 'picsum',
         slug: String(a.slug || (a.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || t + '-' + i),
         category: String(a.category || (t === 'news' ? 'News' : 'Insights')),
         readTime: t === 'news' ? '2 min read' : '5 min read',
@@ -140,7 +194,7 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
           brandBg: '#f9f7f4', brandText: '#1a1a2e', brandHeaderText: '#ffffff',
           logoUrl: '', heroHeadline: 'Insights & Resources',
           heroSubheading: 'Expert thinking to help your team move faster.',
-          heroImageUrl: '',
+          heroImageUrl: heroImageUrl,
           articles: arts.slice(0, 6).map((a, i) => mkItem(a, i, 'article')),
           news: nws.slice(0, 6).map((a, i) => mkItem(a, i, 'news')),
           aboutText: String(parsed.aboutText || 'A modern content hub.'),
@@ -261,6 +315,12 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
     };
   }
 
+  // ── Prefetch Unsplash image pools for scrape branch ──
+  // Fire-and-forget in parallel with GPT so they arrive together
+  const scrapeUnsplashFetch = UK ? Promise.all(
+    Object.keys(CAT_KEYWORDS).map(cat => fetchUnsplashCategory(cat))
+  ) : Promise.resolve();
+
   // ═══ PHASE 4: GPT — short prompt, fast response ═══
   const artsForGPT = realArticles.length > 0
     ? 'REAL articles from '+domain+':\n'+realArticles.map((a,i)=>(i+1)+'. "'+a.title+'"'+(a.summary?' — '+a.summary.slice(0,80):'')).join('\n')
@@ -294,6 +354,7 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
     log('GPT done '+raw.usage?.total_tokens+'tok brand='+(brand.companyName||'?'));
 
     // Resolve Jasper
+    await scrapeUnsplashFetch; // ensure image pools ready
     if (feat) {
       const docId = await jasperP;
       if (docId) { feat.jasperDocId=docId; feat.jasperDocUrl='https://app.jasper.ai/documents/'+docId; log('Jasper doc:'+docId); }
@@ -308,7 +369,7 @@ Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
 
     const mi = (a,i,t) => ({
       id:t+'-'+i, title:String(a.title||t+' '+(i+1)), summary:String(a.summary||''),
-      imageUrl: a.imageUrl || (realArticles[i]?.image) || getItemImage(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
+      imageUrl: a.imageUrl || (realArticles[i]?.image) || getUnsplashImg(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
       imageSource: a.imageUrl?(a.imageSource||'firecrawl'):(realArticles[i]?.image?'firecrawl':'fallback'),
       slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
       category:String(a.category||(t==='news'?'News':'Insights')),
