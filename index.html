@@ -715,21 +715,23 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       rawNews        = parsed.news     || [];
     }
 
-    const IMGS=[
-      'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
-      'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
-      'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
-      'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
-      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
-      'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
-    ];
+    const getItemImage=(slug,category,idx)=>{
+      // Deterministic seed: slug gives uniqueness, category shifts the seed space
+      const CAT_OFFSET={Marketing:1000,AI:2000,Strategy:3000,Growth:4000,Content:5000,
+        Technology:6000,Insights:7000,News:8000,Featured:9000};
+      const offset=CAT_OFFSET[category]||0;
+      // Hash the slug to a number for stable but varied seeds
+      const hash=String(slug||idx).split('').reduce((a,ch)=>((a<<5)-a+ch.charCodeAt(0))|0,0);
+      const seed=Math.abs(hash)+offset+(idx*97);
+      return `https://picsum.photos/seed/${seed}/800/450`;
+    };
     const mkItem=(a,i,t)=>({
       id:t+'-'+i,
       title:String(a.title||t+' '+(i+1)),
       summary:String(a.summary||a.description||''),
-      imageUrl:IMGS[i%IMGS.length],
       slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
       category:String(a.category||(t==='news'?'News':'Insights')),
+      imageUrl:getItemImage(a.slug||(a.title||t+'-'+i),a.category||(t==='news'?'News':'Insights'),i),
       readTime:t==='news'?'2 min read':'5 min read',
       date:String(a.date||new Date(Date.now()-i*86400000*3).toISOString().slice(0,10)),
       body:parseMarkdown('<p>'+(a.summary||a.description||'Coming soon.')+'</p>'),
