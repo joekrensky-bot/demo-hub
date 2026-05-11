@@ -41,6 +41,7 @@ const DEFAULT_CONFIG = {
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
   jasperApiKey:'',
+  workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hubpush',
   prospectUrl:'',articleUrl:'',
   brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
   brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
@@ -586,6 +587,7 @@ function SettingsPanel({onClose}){
   const [vals,setVals]=useState({
     jasperUserId: config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
     jasperApiKey: config.jasperApiKey||'',
+    workatoWebhookUrl: config.workatoWebhookUrl||'',
     spaceId: config.spaceId||'b4hc9l38hrco',
     deliveryKey: config.deliveryKey||'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   });
@@ -612,6 +614,11 @@ function SettingsPanel({onClose}){
           {field('User ID','jasperUserId',true,'hTcTOK3m6xUCKwznLDLXwem3Y9E2')}
           {field('API Key','jasperApiKey',true,'api_XXXXX:YYYYY — for pushing articles to workspace')}
         </div>
+        <div style={{marginTop:16,marginBottom:8,paddingBottom:16,borderBottom:'1px solid #f1f5f9'}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:4}}>Workato</div>
+          <div style={{fontSize:11,color:'#94a3b8',marginBottom:10}}>Paste webhook URL — hub routes through Workato instead of direct API</div>
+          {field('Webhook URL','workatoWebhookUrl',true,'https://webhooks.workato.com/webhooks/rest/…')}
+        </div>
         <div style={{marginTop:16,marginBottom:8}}>
           <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Contentful</div>
           {field('Space ID','spaceId',true,'b4hc9l38hrco')}
@@ -619,7 +626,7 @@ function SettingsPanel({onClose}){
         </div>
         <div style={{display:'flex',gap:8,marginTop:24}}>
           <button onClick={onClose} style={{flex:1,padding:'10px',border:'1.5px solid #e2e8f0',borderRadius:10,background:'white',fontSize:14,color:'#64748b',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>Cancel</button>
-          <button onClick={()=>{updateConfig({jasperUserId:vals.jasperUserId,jasperApiKey:vals.jasperApiKey,spaceId:vals.spaceId,deliveryKey:vals.deliveryKey});onClose();}}
+          <button onClick={()=>{updateConfig({jasperUserId:vals.jasperUserId,jasperApiKey:vals.jasperApiKey,workatoWebhookUrl:vals.workatoWebhookUrl,spaceId:vals.spaceId,deliveryKey:vals.deliveryKey});onClose();}}
             style={{flex:2,padding:'10px',border:'none',borderRadius:10,background:'#FF4F00',color:'white',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
             Save Settings
           </button>
@@ -1142,25 +1149,41 @@ function ValidatePage(){
     const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
     const userId=(local.jasperUserId||config.jasperUserId||'').trim();
 
-    if(apiKey&&heroArt){
+    const workatoUrl=(local.workatoWebhookUrl||config.workatoWebhookUrl||'').trim();
+    if((apiKey||workatoUrl)&&heroArt){
       setPushing(true);setPushStatus('pushing');
       try{
         const rawBody=String(heroArt.body||heroArt.summary||heroArt.title||'');
         const cleanBody=rawBody.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-        const payload={
-          _jasperPush:true,
-          action:'pushHeroArticle',
-          jasperApiKey:apiKey,
-          jasperUserId:userId,
-          projectName:(local.companyName||'Content Hub')+' — Content Hub',
-          title:heroArt.title||'Hero Article',
-          content:cleanBody||heroArt.title||'Hero Article',
-        };
-        setPushStatus('Sending to Jasper API…');
-        const pushRes=await fetch('/.netlify/functions/claude-proxy',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(payload)
-        });
+        let pushRes;
+        if(workatoUrl){
+          // Route through Workato webhook — Workato handles Jasper auth
+          setPushStatus('Sending to Workato…');
+          pushRes=await fetch(workatoUrl,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              companyName:local.companyName||'Content Hub',
+              articleTitle:heroArt.title||'Hero Article',
+              articleContent:cleanBody||heroArt.title,
+              userId:userId,
+            })
+          });
+        } else {
+          // Direct Jasper API via proxy
+          setPushStatus('Sending to Jasper API…');
+          pushRes=await fetch('/.netlify/functions/claude-proxy',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              _jasperPush:true,
+              action:'pushHeroArticle',
+              jasperApiKey:apiKey,
+              jasperUserId:userId,
+              projectName:(local.companyName||'Content Hub')+' — Content Hub',
+              title:heroArt.title||'Hero Article',
+              content:cleanBody||heroArt.title||'Hero Article',
+            })
+          });
+        }
         const pushData=await pushRes.json();
         if(!pushRes.ok||pushData.error){
           setPushStatus('error:'+JSON.stringify(pushData.error||pushData).slice(0,200));
@@ -1363,10 +1386,9 @@ function ValidatePage(){
             :<button onClick={handleGenerate}
               style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
               onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
-              <span>🚀 {(local.jasperApiKey||config.jasperApiKey)?'Generate Hub & Push to Jasper':'Generate Hub'}</span>
-              {(local.jasperApiKey||config.jasperApiKey)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>
-                ✦ Creates a Canvas project + hero article doc in your workspace
-              </span>}
+              <span>🚀 {(local.workatoWebhookUrl||config.workatoWebhookUrl||local.jasperApiKey||config.jasperApiKey)?'Generate Hub & Push to Jasper':'Generate Hub'}</span>
+              {(local.workatoWebhookUrl||config.workatoWebhookUrl)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>✦ Hero article → Workato → Jasper workspace</span>}
+              {!(local.workatoWebhookUrl||config.workatoWebhookUrl)&&(local.jasperApiKey||config.jasperApiKey)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>✦ Direct API push to Jasper workspace</span>}
             </button>
           }
         </div>
