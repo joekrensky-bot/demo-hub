@@ -40,6 +40,7 @@ const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+  jasperApiKey:'',
   prospectUrl:'',articleUrl:'',
   brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
   brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
@@ -584,6 +585,7 @@ function SettingsPanel({onClose}){
   const {config,updateConfig}=useHub();
   const [vals,setVals]=useState({
     jasperUserId: config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+    jasperApiKey: config.jasperApiKey||'',
     spaceId: config.spaceId||'b4hc9l38hrco',
     deliveryKey: config.deliveryKey||'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
   });
@@ -608,6 +610,7 @@ function SettingsPanel({onClose}){
         <div style={{marginBottom:8,paddingBottom:16,borderBottom:'1px solid #f1f5f9'}}>
           <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Jasper</div>
           {field('User ID','jasperUserId',true,'hTcTOK3m6xUCKwznLDLXwem3Y9E2')}
+          {field('API Key','jasperApiKey',true,'api_XXXXX:YYYYY — for pushing articles to workspace')}
         </div>
         <div style={{marginTop:16,marginBottom:8}}>
           <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Contentful</div>
@@ -616,7 +619,7 @@ function SettingsPanel({onClose}){
         </div>
         <div style={{display:'flex',gap:8,marginTop:24}}>
           <button onClick={onClose} style={{flex:1,padding:'10px',border:'1.5px solid #e2e8f0',borderRadius:10,background:'white',fontSize:14,color:'#64748b',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>Cancel</button>
-          <button onClick={()=>{updateConfig({jasperUserId:vals.jasperUserId,spaceId:vals.spaceId,deliveryKey:vals.deliveryKey});onClose();}}
+          <button onClick={()=>{updateConfig({jasperUserId:vals.jasperUserId,jasperApiKey:vals.jasperApiKey,spaceId:vals.spaceId,deliveryKey:vals.deliveryKey});onClose();}}
             style={{flex:2,padding:'10px',border:'none',borderRadius:10,background:'#FF4F00',color:'white',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
             Save Settings
           </button>
@@ -876,7 +879,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       imageUrl:getItemImage(a.slug||(a.title||t+'-'+i),a.category||(t==='news'?'News':'Insights'),i,'generic'),
       readTime:t==='news'?'2 min read':'5 min read',
       date:String(a.date||new Date(Date.now()-i*86400000*3).toISOString().slice(0,10)),
-      body:parseMarkdown('<p>'+(a.summary||a.description||'Coming soon.')+'</p>'),
+      body:a.body?parseMarkdown(a.body):parseMarkdown('<p>'+(a.summary||a.description||'Coming soon.')+'</p>'),
       source:'gpt-paste',isNew:false,jasperDocId:null,jasperDocUrl:null,
     });
 
@@ -1131,7 +1134,77 @@ function ValidatePage(){
   const [tab,setTab]=useState('brand');
   const set=key=>val=>setLocal(p=>({...p,[key]:val}));
 
-  const handleGenerate=()=>{updateConfig({...local,generated:true});navigate('/demo');};
+  const [pushing,setPushing]=useState(false);
+  const [pushStatus,setPushStatus]=useState(''); // '', 'pushing', 'done', 'error'
+
+  const handleGenerate=async()=>{
+    const heroArt=local.articles?.[0];
+    const apiKey=local.jasperApiKey||config.jasperApiKey||'';
+    const userId=local.jasperUserId||config.jasperUserId||'';
+
+    // If we have a Jasper API key and a hero article with real content, push it
+    if(apiKey&&heroArt&&heroArt.body&&heroArt.body.length>50){
+      setPushing(true);setPushStatus('pushing');
+      try{
+        // 1. Create a project (Canvas) for this company
+        const projRes=await fetch('/.netlify/functions/claude-proxy',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            _jasperPush:true,
+            action:'createProject',
+            jasperApiKey:apiKey,
+            userId,
+            projectName:local.companyName+' — Content Hub',
+          })
+        });
+        let jasperDocUrl='';
+        let jasperDocId='';
+        if(projRes.ok){
+          const proj=await projRes.json();
+          const projectId=proj.id||'';
+          // 2. Create document inside the project with hero article content
+          const docRes=await fetch('/.netlify/functions/claude-proxy',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              _jasperPush:true,
+              action:'createDocument',
+              jasperApiKey:apiKey,
+              userId,
+              projectId,
+              title:heroArt.title||'Hero Article',
+              content:heroArt.body.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
+            })
+          });
+          if(docRes.ok){
+            const doc=await docRes.json();
+            jasperDocId=doc.id||'';
+            jasperDocUrl=doc.appUrl||`https://app.jasper.ai/canvas/edit/${jasperDocId}`;
+          }
+        }
+        // Update hero article with Jasper doc link
+        const updatedArticles=[...(local.articles||[])];
+        if(updatedArticles[0]){
+          updatedArticles[0]={...updatedArticles[0],
+            jasperDocId,jasperDocUrl,
+            isNew:!!jasperDocId,
+            source:'jasper-doc',
+          };
+        }
+        setPushStatus('done');
+        updateConfig({...local,articles:updatedArticles,generated:true});
+        navigate('/demo');
+      }catch(e){
+        setPushStatus('error');
+        console.error('Jasper push error:',e);
+        // Still generate hub even if push fails
+        updateConfig({...local,generated:true});
+        navigate('/demo');
+      }finally{setPushing(false);}
+    } else {
+      updateConfig({...local,generated:true});
+      navigate('/demo');
+    }
+  };
 
   return(
     <div style={{minHeight:'100vh',background:'#f8fafc',fontFamily:'DM Sans,sans-serif',display:'grid',gridTemplateColumns:'420px 1fr'}}>
@@ -1284,11 +1357,18 @@ function ValidatePage(){
         </div>
 
         <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0'}}>
-          <button onClick={handleGenerate}
-            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
-            onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
-            🚀 Generate Hub
-          </button>
+          {pushing
+            ?<div style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:14,background:'#fff7f5',border:'1.5px solid #fed7c3',borderRadius:12}}>
+              <div style={{width:18,height:18,border:'2px solid #fed7c3',borderTopColor:'#FF4F00',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}></div>
+              <span style={{fontSize:14,color:'#FF4F00',fontWeight:500}}>Pushing to Jasper workspace...</span>
+            </div>
+            :<button onClick={handleGenerate}
+              style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,background:'#FF4F00',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
+              onMouseOver={e=>e.currentTarget.style.background='#e04500'} onMouseOut={e=>e.currentTarget.style.background='#FF4F00'}>
+              <span>🚀 Generate Hub {(local.jasperApiKey||config.jasperApiKey)&&local.articles?.[0]?.body?.length>50?'& Push to Jasper':''}</span>
+              {(local.jasperApiKey||config.jasperApiKey)&&<span style={{fontSize:11,fontWeight:400,opacity:0.85}}>✦ Hero article will be created in your Jasper workspace</span>}
+            </button>
+          }
         </div>
       </div>
 
