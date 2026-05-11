@@ -25,6 +25,12 @@ exports.handler = async (event) => {
     jasperUserId = String(p.jasperUserId||jasperUserId);
     manual = Boolean(p.manual);
     _jasperPush = Boolean(p._jasperPush);
+    const _workatoPush = Boolean(p._workatoPush);
+    const _workatoUrl = String(p.workatoWebhookUrl||'');
+    const _wCompany = String(p.companyName||'');
+    const _wTitle = String(p.articleTitle||'');
+    const _wContent = String(p.articleContent||'');
+    const _wUserId = String(p.userId||'');
     _action = String(p.action||'');
     _jasperApiKey = String(p.jasperApiKey||'');
     _projectId = String(p.projectId||'');
@@ -35,6 +41,46 @@ exports.handler = async (event) => {
     if (p.jasperUserId) jasperUserId = String(p.jasperUserId);
     if (p.userId) jasperUserId = String(p.userId);
   } catch(e) { return { statusCode:400, headers:H, body:JSON.stringify({error:'Bad JSON'}) }; }
+
+  // ═══ WORKATO WEBHOOK FORWARD ═══
+  if (_workatoPush) {
+    if (!_workatoUrl) return { statusCode:400, headers:H, body:JSON.stringify({error:'workatoWebhookUrl required'}) };
+    log('Forwarding to Workato: ' + _workatoUrl.slice(0,60));
+    try {
+      const wRes = await fetch(_workatoUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName:    _wCompany,
+          articleTitle:   _wTitle,
+          articleContent: _wContent,
+          userId:         _wUserId,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const wText = await wRes.text();
+      log('Workato response: ' + wRes.status + ' ' + wText.slice(0,120));
+      // Try to parse JSON response (contains appUrl if recipe returns it)
+      let wData = {};
+      try { wData = JSON.parse(wText); } catch(_) {}
+      return {
+        statusCode: wRes.ok ? 200 : wRes.status,
+        headers: H,
+        body: JSON.stringify({
+          success: wRes.ok,
+          appUrl:  wData.appUrl || '',
+          docId:   wData.docId  || '',
+          projectId: wData.projectId || '',
+          _debug: L,
+          _workatoStatus: wRes.status,
+          _workatoBody: wText.slice(0, 300),
+        }),
+      };
+    } catch(err) {
+      log('Workato forward error: ' + err.message);
+      return { statusCode:500, headers:H, body:JSON.stringify({error:'Workato forward failed: '+err.message, _debug:L}) };
+    }
+  }
 
   // ═══ JASPER WORKSPACE PUSH ═══
   if (_jasperPush) {

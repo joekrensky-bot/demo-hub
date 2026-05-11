@@ -1157,11 +1157,13 @@ function ValidatePage(){
         const cleanBody=rawBody.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
         let pushRes;
         if(workatoUrl){
-          // Route through Workato webhook — Workato handles Jasper auth
+          // Route through Netlify proxy to avoid CORS — proxy forwards to Workato
           setPushStatus('Sending to Workato…');
-          pushRes=await fetch(workatoUrl,{
+          pushRes=await fetch('/.netlify/functions/claude-proxy',{
             method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({
+              _workatoPush:true,
+              workatoWebhookUrl:workatoUrl,
               companyName:local.companyName||'Content Hub',
               articleTitle:heroArt.title||'Hero Article',
               articleContent:cleanBody||heroArt.title,
