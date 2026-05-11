@@ -96,7 +96,7 @@ const THEMES = {
     id:'generic', label:'Generic', emoji:'🌐',
     description:'Warm · rounded · serif headlines',
     overrides: {
-      brandBg:'#f9f7f4',
+      // brandBg intentionally omitted — defers to prospect config color
       cardBg:'#ffffff', cardBorder:'#e2e8f0',
       cardRadius:'14px', navRadius:'8px', btnRadius:'10px', badgeRadius:'20px',
       heroFont:'DM Serif Display,serif', headingFont:'DM Serif Display,serif',
@@ -170,24 +170,28 @@ function detectTheme(companyName, aboutText) {
 function getThemeStyles(themeId, config) {
   const t = THEMES[themeId] || THEMES.generic;
   const o = t.overrides;
+  // forceDark themes (e.g. b2btech) lock the palette; all others defer to config colors
+  const forceDark = o.forceDark || false;
   return {
-    brandBg: o.forceDark ? o.brandBg : (o.brandBg || config.brandBg || '#f9f7f4'),
-    brandText: o.forceDark ? o.brandText : (config.brandText || '#1a1a2e'),
-    cardBg: o.cardBg || '#ffffff',
-    cardBorder: o.cardBorder || '#e2e8f0',
-    cardRadius: o.cardRadius || '14px',
-    navRadius: o.navRadius || '8px',
-    btnRadius: o.btnRadius || '10px',
-    badgeRadius: o.badgeRadius || '20px',
-    heroFont: o.heroFont || 'DM Serif Display,serif',
-    headingFont: o.headingFont || 'DM Serif Display,serif',
-    categoryStyle: o.categoryStyle || 'pill',
-    sectionBg: o.sectionBg || '#f0ede8',
-    navBg: o.navBg || config.brandPrimary,
-    navTextColor: o.navTextColor || config.brandHeaderText,
-    navShadow: o.navShadow !== undefined ? o.navShadow : '0 2px 16px rgba(0,0,0,0.15)',
+    brandBg:      forceDark ? o.brandBg      : (config.brandBg   || o.brandBg   || '#f9f7f4'),
+    brandText:    forceDark ? o.brandText     : (config.brandText || o.brandText || '#1a1a2e'),
+    // Nav: theme can hardcode a navBg (e.g. white nav for health/ecom), else use prospect primary
+    navBg:        o.navBg   || config.brandPrimary || '#0f172a',
+    navTextColor: o.navTextColor || config.brandHeaderText || '#ffffff',
+    // Shape / structural — always from theme
+    cardBg:       o.cardBg       || '#ffffff',
+    cardBorder:   o.cardBorder   || '#e2e8f0',
+    cardRadius:   o.cardRadius   || '14px',
+    navRadius:    o.navRadius    || '8px',
+    btnRadius:    o.btnRadius    || '10px',
+    badgeRadius:  o.badgeRadius  || '20px',
+    heroFont:     o.heroFont     || 'DM Serif Display,serif',
+    headingFont:  o.headingFont  || 'DM Serif Display,serif',
+    categoryStyle:o.categoryStyle|| 'pill',
+    sectionBg:    o.sectionBg    || config.brandBg || '#f0ede8',
+    navShadow:    o.navShadow !== undefined ? o.navShadow : '0 2px 16px rgba(0,0,0,0.15)',
     navBorderBottom: o.navBorderBottom || 'none',
-    forceDark: o.forceDark || false,
+    forceDark,
   };
 }
 
