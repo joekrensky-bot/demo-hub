@@ -29,77 +29,106 @@ exports.handler = async (event) => {
   if (manual) {
     log('MANUAL mode for: ' + url);
 
-    const jasperCmd = async (command) => {
-      if (!JK) return '';
-      try {
-        const r = await fetch('https://api.jasper.ai/v1/command', {
-          method:'POST',
-          headers:{'Content-Type':'application/json','x-api-key':JK},
-          body:JSON.stringify({inputs:{command}}),
-          signal:AbortSignal.timeout(8000),
-        });
-        if (!r.ok) { log('Jasper cmd fail: '+r.status); return ''; }
-        const d = await r.json();
-        return String(d.data?.[0]?.text||'').trim();
-      } catch(e) { log('Jasper cmd err: '+e.message); return ''; }
-    };
+    const IMGS = [
+      'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
+      'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
+      'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
+      'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
+      'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
+    ];
 
     try {
-      // Generate articles and news in parallel via Jasper
-      log('Jasper generating content...');
-      const [articlesRaw, newsRaw, aboutRaw] = await Promise.all([
-        jasperCmd('Write 6 blog article titles and 2-sentence summaries for a content hub demo for '+url+'. Format as JSON array: [{"title":"","summary":"","category":"one of Marketing,AI,Strategy,Growth,Content,Technology","slug":"lowercase-hyphen"}]. Return ONLY the JSON array.'),
-        jasperCmd('Write 6 news headlines and 1-sentence summaries for '+url+'. Format as JSON array: [{"title":"","summary":"","slug":"lowercase-hyphen"}]. Return ONLY the JSON array.'),
-        jasperCmd('Write a 2-paragraph about section for '+url+' content hub. Professional tone.'),
-      ]);
+      const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
+      log('GPT manual content for: ' + co);
 
-      const parseArr = (raw) => { try { const m=raw.match(/\[[\s\S]*\]/); return m?JSON.parse(m[0]):[]; } catch(e){return [];} };
-      let arts = parseArr(articlesRaw);
-      let nws = parseArr(newsRaw);
-      log('Jasper done: '+arts.length+' articles, '+nws.length+' news');
+      const prompt = `Generate a realistic content hub demo for a company called "${co}".
+Return ONLY a valid JSON object, no markdown, no explanation:
+{
+  "articles": [
+    {"title":"","summary":"2-sentence summary","category":"one of Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen"},
+    ...6 total
+  ],
+  "news": [
+    {"title":"","summary":"1 sentence","slug":"lowercase-hyphen"},
+    ...6 total
+  ],
+  "aboutText": "2 paragraphs about the ${co} content hub, professional tone"
+}
+Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
 
-      // Fill gaps with placeholders
-      const co = url.replace(/https?:\/\//,'').split('/')[0];
-      const ph=(t,i)=>({title:t==='n'?'Company Update '+(i+1):'Article '+(i+1),summary:'Latest from '+co+'.',slug:t+'-'+i,category:t==='n'?'News':'Insights'});
-      while(arts.length<6)arts.push(ph('a',arts.length));
-      while(nws.length<6)nws.push(ph('n',nws.length));
+      const gr = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OK },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 1800,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: 'Return only valid JSON. No markdown. No explanation.' },
+            { role: 'user', content: prompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
 
-      // Use GPT just for brand colors (tiny fast call)
-      let brandPrimary='#0f172a', brandAccent='#6366f1', brandHeaderText='#fff';
-      try {
-        const gr = await fetch('https://api.openai.com/v1/chat/completions', {
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+OK},
-          body:JSON.stringify({model:'gpt-4o-mini',max_tokens:100,response_format:{type:'json_object'},
-            messages:[{role:'system',content:'JSON only'},{role:'user',content:'Return brand colors for "'+co+'": {"brandPrimary":"#hex nav","brandAccent":"#hex cta","brandHeaderText":"#fff or #000","heroHeadline":"tagline","heroSubheading":"1 sentence"}'}]}),
-          signal:AbortSignal.timeout(4000),
-        });
-        if (gr.ok) {
-          const b=JSON.parse((await gr.json()).choices[0].message.content);
-          brandPrimary=b.brandPrimary||brandPrimary; brandAccent=b.brandAccent||brandAccent;
-          brandHeaderText=b.brandHeaderText||brandHeaderText;
-          log('GPT brand colors done');
-        }
-      } catch(e) { log('GPT brand err: '+e.message); }
+      if (!gr.ok) {
+        const et = await gr.text();
+        throw new Error('OpenAI ' + gr.status + ': ' + et.slice(0, 120));
+      }
 
-      const mi=(a,i,t)=>({id:t+'-'+i,title:String(a.title||t+' '+(i+1)),summary:String(a.summary||''),
-        imageUrl:IMGS[i%IMGS.length],imageSource:'fallback',
-        slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
-        category:String(a.category||(t==='news'?'News':'Insights')),readTime:t==='news'?'2 min':'5 min read',
-        date:'2025-05-05',body:'<p>'+(a.summary||'Coming soon.')+'</p>',
-        source:'jasper',isNew:false,jasperDocId:null,jasperDocUrl:null});
+      const gd = await gr.json();
+      const raw = gd.choices?.[0]?.message?.content || '{}';
+      let parsed = { articles: [], news: [], aboutText: '' };
+      try { parsed = JSON.parse(raw); } catch (pe) { log('JSON parse err: ' + pe.message); }
 
-      log('DONE '+((Date.now()-T)/1000).toFixed(1)+'s');
-      return {statusCode:200,headers:H,body:JSON.stringify({
-        _debug:L,companyName:co,
-        brandPrimary,brandAccent,brandBg:'#f9f7f4',brandText:'#1a1a2e',brandHeaderText,
-        logoUrl:'',heroHeadline:'Insights & Resources',heroSubheading:'Expert thinking to help your team move faster.',heroImageUrl:'',
-        articles:arts.slice(0,6).map((a,i)=>mi(a,i,'article')),
-        news:nws.slice(0,6).map((a,i)=>mi(a,i,'news')),
-        aboutText:String(aboutRaw||'A modern content hub.'),products:[],featuredArticle:null,
-      })};
-    } catch(err) {
-      return {statusCode:500,headers:H,body:JSON.stringify({error:String(err.message),_debug:L})};
+      log('GPT manual done: ' + (parsed.articles?.length || 0) + ' articles');
+
+      const ph = (t, i) => ({
+        title: t === 'news' ? 'Company Update ' + (i + 1) : 'Article ' + (i + 1),
+        summary: 'Latest from ' + co + '.',
+        slug: t + '-' + i,
+        category: t === 'news' ? 'News' : 'Insights',
+      });
+      const arts = (parsed.articles || []);
+      const nws  = (parsed.news || []);
+      while (arts.length < 6) arts.push(ph('article', arts.length));
+      while (nws.length  < 6) nws.push(ph('news', nws.length));
+
+      const mkItem = (a, i, t) => ({
+        id: t + '-' + i,
+        title: String(a.title || t + ' ' + (i + 1)),
+        summary: String(a.summary || ''),
+        imageUrl: IMGS[i % IMGS.length],
+        imageSource: 'fallback',
+        slug: String(a.slug || (a.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || t + '-' + i),
+        category: String(a.category || (t === 'news' ? 'News' : 'Insights')),
+        readTime: t === 'news' ? '2 min read' : '5 min read',
+        date: new Date(Date.now() - i * 86400000 * 3).toISOString().slice(0, 10),
+        body: '<p>' + (a.summary || 'Coming soon.') + '</p>',
+        source: 'manual', isNew: false, jasperDocId: null, jasperDocUrl: null,
+      });
+
+      log('DONE manual ' + ((Date.now() - T) / 1000).toFixed(1) + 's');
+      return {
+        statusCode: 200, headers: H,
+        body: JSON.stringify({
+          _debug: L,
+          companyName: co,
+          brandPrimary: '#0f172a', brandAccent: '#6366f1',
+          brandBg: '#f9f7f4', brandText: '#1a1a2e', brandHeaderText: '#ffffff',
+          logoUrl: '', heroHeadline: 'Insights & Resources',
+          heroSubheading: 'Expert thinking to help your team move faster.',
+          heroImageUrl: '',
+          articles: arts.slice(0, 6).map((a, i) => mkItem(a, i, 'article')),
+          news: nws.slice(0, 6).map((a, i) => mkItem(a, i, 'news')),
+          aboutText: String(parsed.aboutText || 'A modern content hub.'),
+          products: [], featuredArticle: null,
+        }),
+      };
+    } catch (err) {
+      log('MANUAL ERROR: ' + err.message);
+      return { statusCode: 500, headers: H, body: JSON.stringify({ error: String(err.message), _debug: L }) };
     }
   }
 
