@@ -430,6 +430,8 @@ function SetupPage(){
   const [loadingMsg,setLoadingMsg]=useState('');
   const [error,setError]=useState('');
   const [showManual,setShowManual]=useState(true);
+  const [setupMode,setSetupMode]=useState('manual'); // 'manual' | 'gpt'
+  const [gptPaste,setGptPaste]=useState('');
   const [manual,setManual]=useState({
     companyName:'',logoUrl:'',
     heroHeadline:'',heroSubheading:'',
@@ -538,6 +540,134 @@ function SetupPage(){
     }
   };
 
+  const GPT_PROMPT=`You are helping build a branded content hub demo. For the company below,
+return ONLY a valid JSON object (no markdown, no explanation) in this exact shape:
+{
+  "companyName": "string",
+  "heroHeadline": "short tagline",
+  "heroSubheading": "1 sentence",
+  "brandPrimary": "#hex — nav/header color",
+  "brandAccent": "#hex — CTA/button color",
+  "brandBg": "#hex — page background",
+  "brandText": "#hex — body text",
+  "logoUrl": "clearbit or direct logo URL if you know it, else empty string",
+  "articles": [
+    {"title":"","summary":"2 sentences","category":"Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen"},
+    ... 6 total
+  ],
+  "news": [
+    {"title":"","summary":"1 sentence","slug":"lowercase-hyphen"},
+    ... 6 total
+  ],
+  "aboutText": "2 short paragraphs"
+}
+Company: [REPLACE WITH COMPANY NAME OR URL]`;
+
+  const handleGptPaste=()=>{
+    setError('');
+    const raw=gptPaste.trim();
+    if(!raw){setError('Paste the JSON from the GPT agent first');return;}
+    let parsed;
+    try{
+      const m=raw.match(/\{[\s\S]*\}/);
+      if(!m)throw new Error('No JSON object found in pasted text');
+      parsed=JSON.parse(m[0]);
+    }catch(e){
+      setError('Could not parse JSON: '+e.message);return;
+    }
+
+    /* ── Normalise: handle both the rich agent format and the flat format ── */
+    const isAgentFormat = !!(parsed.prospect || parsed.color_identity || parsed.blogs || parsed.homepage);
+
+    let companyName, logoUrl, heroHeadline, heroSubheading,
+        brandPrimary, brandAccent, brandBg, brandText, aboutText,
+        rawArticles, rawNews;
+
+    if(isAgentFormat){
+      // ── Rich agent format (prospect / homepage / blogs / news / color_identity) ──
+      const p   = parsed.prospect || {};
+      const hp  = parsed.homepage || {};
+      const ci  = parsed.color_identity || {};
+      const hero = hp.hero || {};
+
+      companyName    = String(p.name || 'Content Hub');
+      logoUrl        = `https://logo.clearbit.com/${(p.homepage_url||'').replace(/https?:\/\//,'').replace(/^www\./,'').split('/')[0]}`;
+      heroHeadline   = String(hero.headline || 'Insights & Resources');
+      heroSubheading = String(hero.description || hero.subheadline || 'Stay ahead with the latest thinking from our team.');
+
+      brandPrimary = String(ci.secondary?.hex || ci.primary?.hex || '#0f172a');
+      brandAccent  = String(ci.primary?.hex   || ci.accent?.hex  || '#6366f1');
+      brandBg      = String(ci.background?.hex || '#ffffff');
+      brandText    = String(ci.text?.hex       || '#1c1c1c');
+
+      // blogs → articles, news → news
+      rawArticles = (parsed.blogs  || []).map(b=>({
+        title:    b.title,
+        summary:  b.description,
+        slug:     (s=>s&&!s.includes('.')?s:(b.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50))((b.url||'').split('/').filter(Boolean).pop()),
+        category: 'Insights',
+        date:     b.date || '',
+        url:      b.url  || '',
+      }));
+      rawNews = (parsed.news || []).map(n=>({
+        title:   n.title,
+        summary: n.description,
+        slug:    (s=>s&&!s.includes('.')?s:(n.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50))((n.url||'').split('/').filter(Boolean).pop()),
+        category:'News',
+        date:    n.date || '',
+        url:     n.url  || '',
+      }));
+      aboutText = String(hero.description || 'A modern content hub for ' + companyName + '.');
+
+    } else {
+      // ── Flat format (original GPT prompt response) ──
+      companyName    = String(parsed.companyName    || 'Content Hub');
+      logoUrl        = String(parsed.logoUrl        || '');
+      heroHeadline   = String(parsed.heroHeadline   || 'Insights & Resources');
+      heroSubheading = String(parsed.heroSubheading || 'Stay ahead with the latest thinking from our team.');
+      brandPrimary   = String(parsed.brandPrimary   || '#0f172a');
+      brandAccent    = String(parsed.brandAccent    || '#6366f1');
+      brandBg        = String(parsed.brandBg        || '#f9f7f4');
+      brandText      = String(parsed.brandText      || '#0f172a');
+      aboutText      = String(parsed.aboutText      || '');
+      rawArticles    = parsed.articles || [];
+      rawNews        = parsed.news     || [];
+    }
+
+    const IMGS=[
+      'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&q=80',
+      'https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&q=80',
+      'https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=800&q=80',
+      'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80',
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
+      'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
+    ];
+    const mkItem=(a,i,t)=>({
+      id:t+'-'+i,
+      title:String(a.title||t+' '+(i+1)),
+      summary:String(a.summary||a.description||''),
+      imageUrl:IMGS[i%IMGS.length],
+      slug:String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
+      category:String(a.category||(t==='news'?'News':'Insights')),
+      readTime:t==='news'?'2 min read':'5 min read',
+      date:String(a.date||new Date(Date.now()-i*86400000*3).toISOString().slice(0,10)),
+      body:'<p>'+(a.summary||a.description||'Coming soon.')+'</p>',
+      source:'gpt-paste',isNew:false,jasperDocId:null,jasperDocUrl:null,
+    });
+
+    const bp = brandPrimary;
+    updateConfig({
+      ...DEFAULT_CONFIG,
+      companyName,logoUrl,heroHeadline,heroSubheading,
+      brandPrimary:bp,brandAccent,brandBg,brandText,
+      brandHeaderText:bestTextColor(bp),
+      articles:rawArticles.slice(0,6).map((a,i)=>mkItem(a,i,'article')),
+      news:rawNews.slice(0,6).map((a,i)=>mkItem(a,i,'news')),
+      aboutText,products:[],generated:false,
+    });
+    navigate('/validate');
+  };
+
   return(
     <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'60px 16px 40px',fontFamily:'DM Sans,sans-serif'}}>
       {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)}/>}
@@ -617,14 +747,59 @@ function SetupPage(){
             </button>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:12,margin:'20px 0 12px',color:'#94a3b8',fontSize:13}}>
-            <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>or set up manually<div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
+            <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
+            <span>or set up without scraping</span>
+            <div style={{flex:1,height:1,background:'#e2e8f0'}}></div>
           </div>
-          <button onClick={()=>setShowManual(v=>!v)} disabled={loading}
-            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:'transparent',border:'1.5px dashed #cbd5e1',color:'#64748b',borderRadius:10,padding:10,fontSize:14,fontFamily:'DM Sans,sans-serif',cursor:'pointer'}}>
-            ⚙ {showManual?'Hide manual setup':'Set up manually (recommended)'}
-          </button>
+          {/* Mode tabs */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:showManual?0:0}}>
+            <button onClick={()=>{setSetupMode('manual');setShowManual(true);}} disabled={loading}
+              style={{padding:'10px 12px',borderRadius:10,border:setupMode==='manual'?'2px solid #FF4F00':'1.5px solid #e2e8f0',
+                background:setupMode==='manual'?'#fff7f5':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+              <div style={{fontSize:13,fontWeight:600,color:setupMode==='manual'?'#FF4F00':'#374151',marginBottom:2}}>⚙ Manual</div>
+              <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Pick colors, Claude generates content.</div>
+            </button>
+            <button onClick={()=>{setSetupMode('gpt');setShowManual(true);}} disabled={loading}
+              style={{padding:'10px 12px',borderRadius:10,border:setupMode==='gpt'?'2px solid #6366f1':'1.5px solid #e2e8f0',
+                background:setupMode==='gpt'?'#eef2ff':'white',cursor:'pointer',textAlign:'left',fontFamily:'DM Sans,sans-serif',transition:'all 0.15s'}}>
+              <div style={{fontSize:13,fontWeight:600,color:setupMode==='gpt'?'#6366f1':'#374151',marginBottom:2}}>🤖 GPT Assisted</div>
+              <div style={{fontSize:11,color:'#64748b',lineHeight:1.4}}>Run a prompt in ChatGPT, paste results.</div>
+            </button>
+          </div>
           {showManual&&(
-            <div style={{marginTop:16,padding:20,background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+            <div style={{marginTop:8,padding:20,background:'#f8fafc',borderRadius:12,border:'1px solid #e2e8f0'}}>
+            {setupMode==='gpt'?(
+              <div>
+                {/* ── GPT Prompt to copy ── */}
+                <div style={{marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                    <label style={{fontSize:12,fontWeight:600,color:'#374151'}}>Step 1 — Copy this prompt into ChatGPT</label>
+                    <button onClick={()=>navigator.clipboard.writeText(GPT_PROMPT)}
+                      style={{fontSize:11,fontWeight:600,color:'#6366f1',background:'#eef2ff',border:'none',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                      Copy prompt
+                    </button>
+                  </div>
+                  <pre style={{fontSize:10.5,color:'#475569',background:'white',border:'1px solid #e2e8f0',borderRadius:8,
+                    padding:'10px 12px',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.6,maxHeight:140,overflowY:'auto',
+                    fontFamily:'monospace',margin:0}}>{GPT_PROMPT}</pre>
+                </div>
+                {/* ── Paste area ── */}
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:6,display:'block'}}>Step 2 — Paste the JSON response here</label>
+                  <textarea value={gptPaste} onChange={e=>setGptPaste(e.target.value)}
+                    placeholder={'{ "companyName": "Acme", "articles": [...], ... }'}
+                    rows={6} disabled={loading}
+                    style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'10px 12px',fontSize:12,
+                      fontFamily:'monospace',outline:'none',color:'#0f172a',background:'white',resize:'vertical',lineHeight:1.5}}/>
+                </div>
+                <button onClick={handleGptPaste} disabled={loading||!gptPaste.trim()}
+                  style={{width:'100%',background:gptPaste.trim()?'#6366f1':'#cbd5e1',color:'white',border:'none',borderRadius:10,
+                    padding:'13px',fontSize:14,fontWeight:600,cursor:gptPaste.trim()?'pointer':'not-allowed',
+                    fontFamily:'DM Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  🤖 Build Hub from Pasted JSON
+                </button>
+              </div>
+            ):(
 
               {/* ── Identity ── */}
               <div style={{marginBottom:16}}>
@@ -698,6 +873,7 @@ function SetupPage(){
                   &#x2756; Generate with Claude
                 </button>
               }
+            )}
             </div>
           )}
         </div>
@@ -990,8 +1166,19 @@ function HubLayout({children}){
       <nav style={{background:getThemeStyles(config.theme||'generic',config).navBg,position:'sticky',top:0,zIndex:100,boxShadow:getThemeStyles(config.theme||'generic',config).navShadow,borderBottom:getThemeStyles(config.theme||'generic',config).navBorderBottom!=='none'?getThemeStyles(config.theme||'generic',config).navBorderBottom:'none'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'0 32px',height:64,display:'flex',alignItems:'center',gap:32}}>
           <a href="#/demo" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
-            {config.logoUrl&&<img src={config.logoUrl} alt="" style={{height:26,objectFit:'contain',filter:getThemeStyles(config.theme||'generic',config).navTextColor==='#ffffff'?'brightness(0) invert(1)':'none'}} onError={e=>{e.target.style.display='none';}}/>}
-            <span style={{fontSize:17,fontWeight:700,color:getThemeStyles(config.theme||'generic',config).navTextColor,letterSpacing:'-0.2px'}}>{config.companyName}</span>
+            {config.logoUrl
+              ?<img src={config.logoUrl} alt={config.companyName}
+                style={{height:28,maxWidth:160,objectFit:'contain',
+                  filter:getThemeStyles(config.theme||'generic',config).navTextColor==='#ffffff'?'brightness(0) invert(1)':'none'}}
+                onError={e=>{
+                  e.target.style.display='none';
+                  e.target.nextSibling.style.display='block';
+                }}/>
+              :null
+            }
+            <span style={{fontSize:17,fontWeight:700,color:getThemeStyles(config.theme||'generic',config).navTextColor,letterSpacing:'-0.2px',display:config.logoUrl?'none':'block'}}>
+              {config.companyName}
+            </span>
           </a>
           <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
             {navLinks.map(({label,path})=>{
