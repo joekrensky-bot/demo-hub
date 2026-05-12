@@ -42,6 +42,7 @@ const DEFAULT_CONFIG = {
   jasperUserId:'usr_11E2B663A25C4A40A1C470A2BCA97898',
   jasperApiKey:'',
   workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hero-article-push',
+  contentfulWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/contentfulpush',
   prospectUrl:'',articleUrl:'',
   brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
   brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
@@ -1193,7 +1194,9 @@ function ValidatePage(){
   const [pushStatus,setPushStatus]=useState('');
   const [wsUsers,setWsUsers]=useState(null);
   const [loadingUsers,setLoadingUsers]=useState(false);
-  const [userErr,setUserErr]=useState(''); // ''|'pushing'|'done'|'error:...'
+  const [userErr,setUserErr]=useState('');
+  const [cfSending,setCfSending]=useState(false);
+  const [cfSent,setCfSent]=useState(''); // ''|'pushing'|'done'|'error:...'
   const [pushUserId,setPushUserId]=useState(local.jasperUserId||config.jasperUserId||'');
   const [pushWebhookUrl,setPushWebhookUrl]=useState(
     local.workatoWebhookUrl||config.workatoWebhookUrl||
@@ -1546,6 +1549,39 @@ function ValidatePage(){
         </div>
         <MiniPreview config={local}/>
         <p style={{marginTop:14,fontSize:12,color:'#94a3b8',textAlign:'center',maxWidth:400}}>Preview updates as you edit. The final hub will include full pages and real content.</p>
+
+        {/* ── Subtle extra actions ── */}
+        <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:6,width:'100%',maxWidth:400}}>
+          {(local.contentfulWebhookUrl||config.contentfulWebhookUrl)&&(
+            <button onClick={async()=>{
+                const url=(local.contentfulWebhookUrl||config.contentfulWebhookUrl||'').trim();
+                if(!url)return;
+                setCfSending(true);setCfSent('');
+                try{
+                  const res=await fetch('/.netlify/functions/claude-proxy',{
+                    method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({
+                      _workatoPush:true,
+                      workatoWebhookUrl:url,
+                      companyName:local.companyName||'',
+                      articleTitle:local.articles?.[0]?.title||'',
+                      articleContent:(local.articles?.[0]?.body||local.articles?.[0]?.summary||'').replace(/<[^>]*>/g,' ').replace(/[ 	]+/g,' ').trim(),
+                      userId:local.jasperUserId||config.jasperUserId||'',
+                    })
+                  });
+                  const d=await res.json();
+                  setCfSent(d.success||res.ok?'✓ Sent':'⚠ '+(d.error||'failed').toString().slice(0,60));
+                }catch(e){setCfSent('⚠ '+e.message);}
+                finally{setCfSending(false);}
+              }} disabled={cfSending} title="Push to Contentful via Workato"
+              style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'1px solid #e2e8f0',
+                borderRadius:8,padding:'6px 10px',fontSize:11,color:cfSent.startsWith('✓')?'#16a34a':'#94a3b8',
+                cursor:'pointer',fontFamily:'DM Sans,sans-serif',alignSelf:'flex-start'}}>
+              <span style={{fontSize:14}}>{cfSending?'⏳':'🛩'}</span>
+              <span>{cfSending?'Sending…':cfSent||'Push to Contentful'}</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
