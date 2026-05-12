@@ -474,8 +474,8 @@ function App(){
           const f=item.fields;
           let imageUrl=`https://picsum.photos/seed/cf-${item.sys.id}/800/450`;
           if(f.featuredImage&&data.includes){
-            const asset=data.includes.Asset?.find(a=>a.sys.id===f.featuredImage.sys.id);
-            if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
+            const asset=((data.includes&&data.includes.Asset)||[]).find(a=>a.sys.id===f.featuredImage.sys.id);
+            if(asset&&asset.fields&&asset.fields.file&&asset.fields.file.url)imageUrl='https:'+asset.fields.file.url;
           }
           return{
             id:item.sys.id,
@@ -533,9 +533,9 @@ function App(){
         const r=await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=landscape&content_filter=high&per_page=10&client_id=${UNSPLASH_KEY}`);
         if(!r.ok)return null;
         const d=await r.json();
-        const results=d?.results||[];
+        const results=(d&&d.results)||[];
         if(!results.length)return null;
-        return results[seed%results.length]?.urls?.regular||null;
+        return (results[seed%results.length]&&results[seed%results.length].urls&&results[seed%results.length].urls.regular)||null;
       }catch{return null;}
     };
     const enrich=async()=>{
@@ -847,14 +847,14 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
         if(typeof v==='string'&&v.startsWith('#')) return v;
         if(typeof v==='string'&&v.match(/^#[0-9a-fA-F]{3,6}$/)) return v;
         if(typeof v==='string'&&v.length>0&&!v.startsWith('http')) return null;
-        return v?.hex||null;
+        return (v&&v.hex)||null;
       };
       // For array format: primary[0]=brand color, primary[1]=dark, primary[2]=light
       const ci_primary_arr = Array.isArray(ci.primary) ? ci.primary : null;
       // Array format: primary[0]=brand/accent, primary[1]=dark/nav, primary[2]=light/bg
-      brandPrimary = String(ci_primary_arr?.[1]&&ci_primary_arr[1].startsWith('#')?ci_primary_arr[1]:null || hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
-      brandAccent  = String(ci_primary_arr?.[0]&&ci_primary_arr[0].startsWith('#')?ci_primary_arr[0]:null || hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
-      brandBg      = String(ci_primary_arr?.[2]&&ci_primary_arr[2].startsWith('#')?ci_primary_arr[2]:null || hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
+      brandPrimary = String(ci_primary_arr&&ci_primary_arr[1]&&ci_primary_arr[1].startsWith('#')?ci_primary_arr[1]:null || hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
+      brandAccent  = String(ci_primary_arr&&ci_primary_arr[0]&&ci_primary_arr[0].startsWith('#')?ci_primary_arr[0]:null || hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
+      brandBg      = String(ci_primary_arr&&ci_primary_arr[2]&&ci_primary_arr[2].startsWith('#')?ci_primary_arr[2]:null || hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
       brandText    = String(hexOf(ci.text) || '#1c1c1c');
 
       // blogs → articles, news → news
@@ -937,7 +937,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
 
     const bp = brandPrimary;
     // hero image: use hero_article image_url if present, else default
-    const heroImgUrl = (parsed.hero_article?.image_url) || '';
+    const heroImgUrl = (parsed.hero_article&&parsed.hero_article.image_url) || '';
     const bank = CURATED_IMAGES.generic; // will be refined by theme in ValidatePage
     updateConfig({
       ...DEFAULT_CONFIG,
@@ -1207,7 +1207,7 @@ function ValidatePage(){
   );
 
   const handleJasperPush=async()=>{
-    const heroArt=local.articles?.[0];
+    const heroArt=local.articles&&local.articles[0];
     if(!heroArt){setPushStatus('error:No hero article found');return;}
     const workatoUrl=pushWebhookUrl.trim();
     const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
@@ -1313,7 +1313,7 @@ function ValidatePage(){
           {tab==='brand'&&<>
             <Section title="Design Theme">
               <ThemeToggle value={local.theme||'generic'} onChange={v=>{const bank=CURATED_IMAGES[v]||CURATED_IMAGES.generic;const defaultHeros=Object.values(CURATED_IMAGES).map(b=>b.hero);const heroIsDefault=!local.heroImageUrl||defaultHeros.includes(local.heroImageUrl)||local.heroImageUrl===DEFAULT_HERO_IMG;setLocal(p=>({...p,theme:v,heroImageUrl:heroIsDefault?bank.hero:p.heroImageUrl}));}}/>
-              <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{THEMES[local.theme||'generic']?.description}</div>
+              <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{(THEMES[local.theme||'generic']&&THEMES[local.theme||'generic'].description)||''}</div>
             </Section>
             <Section title="Colors">
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -1358,7 +1358,7 @@ function ValidatePage(){
           </>}
 
           {tab==='hero'&&(()=>{
-            const hero=local.articles?.[0]||{};
+            const hero=local.articles&&local.articles[0]||{};
             const setHero=updated=>{
               const next=[...( local.articles||[])];
               next[0]=updated;
@@ -1448,7 +1448,7 @@ function ValidatePage(){
                             const d=await res.json();
                             if(d.error){setUserErr(String(d.error));return;}
                             setWsUsers(d.users||[]);
-                            if(d.users?.length===1) setPushUserId(d.users[0].id);
+                            if(d.users&&d.users.length===1) setPushUserId(d.users[0].id);
                           }catch(e){setUserErr(e.message);}
                           finally{setLoadingUsers(false);}
                         }} disabled={loadingUsers}
@@ -1510,14 +1510,14 @@ function ValidatePage(){
           })()}
 
           {tab==='content'&&<>
-            <Section title={`Articles (${local.articles?.length||0})`}>
+            <Section title={`Articles (${(local.articles&&local.articles.length)||0})`}>
               {(local.articles||[]).map((art,i)=>(
                 <ContentItemEditor key={i} item={art} num={i+1} onChange={updated=>{
                   const next=[...local.articles];next[i]=updated;set('articles')(next);
                 }}/>
               ))}
             </Section>
-            <Section title={`News (${local.news?.length||0})`}>
+            <Section title={`News (${(local.news&&local.news.length)||0})`}>
               {(local.news||[]).map((item,i)=>(
                 <ContentItemEditor key={i} item={item} num={i+1} titleOnly onChange={updated=>{
                   const next=[...local.news];next[i]=updated;set('news')(next);
@@ -1567,8 +1567,8 @@ function ValidatePage(){
                       _workatoPush:true,
                       workatoWebhookUrl:url,
                       companyName:local.companyName||'',
-                      articleTitle:local.articles?.[0]?.title||'',
-                      articleContent:(local.articles?.[0]?.body||local.articles?.[0]?.summary||'').replace(/<[^>]*>/g,' ').replace(/[ 	]+/g,' ').trim(),
+                      articleTitle:(local.articles&&local.articles[0]&&local.articles[0].title)||'',
+                      articleContent:((local.articles&&local.articles[0]&&(local.articles[0].body||local.articles[0].summary))||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
                       userId:local.jasperUserId||config.jasperUserId||'',
                     })
                   });
@@ -1839,6 +1839,7 @@ function HubLayout({children}){
         {(config.contentfulWebhookUrl)&&(
           <button onClick={async()=>{
               const url=config.contentfulWebhookUrl.trim();
+              const a0=config.articles&&config.articles[0];
               try{
                 await fetch('/.netlify/functions/claude-proxy',{
                   method:'POST',headers:{'Content-Type':'application/json'},
@@ -1846,8 +1847,8 @@ function HubLayout({children}){
                     _workatoPush:true,
                     workatoWebhookUrl:url,
                     companyName:config.companyName||'',
-                    articleTitle:config.articles?.[0]?.title||'',
-                    articleContent:(config.articles?.[0]?.body||config.articles?.[0]?.summary||'').replace(/<[^>]*>/g,' ').replace(/[ \t]+/g,' ').trim(),
+                    articleTitle:(a0&&a0.title)||'',
+                    articleContent:((a0&&(a0.body||a0.summary))||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
                     userId:config.jasperUserId||'',
                   })
                 });
@@ -2179,7 +2180,7 @@ function NewsDetail({slug}){return <DetailPage slug={slug} type="news"/>;}
 function ProductsPage(){
   const {config}=useHub();
   const [openIdx,setOpenIdx]=useState(null);
-  const products=config.products?.length?config.products:[
+  const products=config.products&&config.products.length?config.products:[
     {name:'Core Platform',description:'Our flagship solution built for teams that need speed, accuracy, and scale.',cta:'Learn more'},
     {name:'Enterprise Suite',description:'Advanced features for large organizations including SSO, admin controls, and dedicated support.',cta:'Request demo'},
     {name:'API Access',description:'Integrate directly into your existing workflows with our developer-friendly REST API.',cta:'View docs'},
