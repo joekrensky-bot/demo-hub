@@ -787,8 +787,13 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     try{
       const m=raw.match(/\{[\s\S]*\}/);
       if(!m)throw new Error('No JSON object found in pasted text');
+      // Step 0: URL-decode in case user copied rendered HTML links
+      let rawJson=m[0];
+      if(rawJson.includes('%22')||rawJson.includes('%7B')) rawJson=decodeURIComponent(rawJson);
+      // Step 0b: strip trailing newlines/spaces inside URL strings (agent sometimes adds \n)
+      rawJson=rawJson.replace(/"(https?:\/\/[^"]*?)\s+"/g,'"$1"');
       // Strip markdown link syntax — multi-pass to handle all GPT agent URL formats
-      let cleaned=m[0]
+      let cleaned=rawJson
         .replace(/"\[([^\]]*)\]\(([^)]*)\)"/g,'"$2"') // "[text](url)" → "url" (quoted)
         .replace(/\[([^\]]*)\]\(([^)]*)\)/g,'$2')        // [text](url) → url (unquoted)
         .replace(/:\s*null(?=\s*[,}\]])/g,': ""')         // null values → empty string
@@ -802,7 +807,14 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
         parsed=JSON.parse(cleaned);
       }
     }catch(e){
-      setError('Could not parse JSON: '+e.message);return;
+      const isUrlEncoded=raw.includes('%22')||raw.includes('%7B');
+      const isMangledLinks=raw.includes('](https://')&&raw.includes('%22');
+      if(isMangledLinks){
+        setError('Looks like you copied rendered link text from ChatGPT. Use the copy button (📋) on the JSON code block in ChatGPT — not text selection — to get clean JSON.');
+      } else {
+        setError('Could not parse JSON: '+e.message+'. Try using the copy button on the code block in ChatGPT.');
+      }
+      return;
     }
 
     /* ── Normalise: handle both the rich agent format and the flat format ── */
