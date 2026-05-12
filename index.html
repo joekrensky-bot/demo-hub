@@ -787,7 +787,11 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     try{
       const m=raw.match(/\{[\s\S]*\}/);
       if(!m)throw new Error('No JSON object found in pasted text');
-      parsed=JSON.parse(m[0]);
+      // Strip markdown link syntax [text](url) → url, and [text](url) in values → url
+      const cleaned=m[0]
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'$2') // [text](url) → url
+        .replace(/null(?=\s*[,}])/g,'""');           // null values → empty string
+      parsed=JSON.parse(cleaned);
     }catch(e){
       setError('Could not parse JSON: '+e.message);return;
     }
@@ -811,17 +815,16 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       heroHeadline   = String(hero.headline || 'Insights & Resources');
       heroSubheading = String(hero.description || hero.subheadline || 'Stay ahead with the latest thinking from our team.');
 
-      // Handle both formats:
-      //   object format: { primary: { hex: '#...' } }  (Cisco-style)
-      //   flat format:   { primary: '#...', dark: '#...', light: '#...' } (EGYM-style)
-      const hexOf = v => typeof v==='string'&&v.startsWith('#') ? v : (v?.hex||null);
-      // For nav/header: prefer 'dark' (flat) or secondary.hex (object), else primary
+      // Handle both formats + null values + observed_palette arrays
+      const hexOf = v => {
+        if(!v||v==='null'||v==='""') return null;
+        if(typeof v==='string'&&v.startsWith('#')) return v;
+        if(typeof v==='string'&&v.length>0&&!v.startsWith('http')) return null; // named color like 'black'
+        return v?.hex||null;
+      };
       brandPrimary = String(hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
-      // For CTA accent: prefer 'primary' (both formats)
       brandAccent  = String(hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
-      // For page bg: prefer 'light' (flat) or 'background' (object)
       brandBg      = String(hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
-      // For body text: prefer 'dark' derived or text color
       brandText    = String(hexOf(ci.text) || '#1c1c1c');
 
       // blogs → articles, news → news
