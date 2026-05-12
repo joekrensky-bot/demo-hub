@@ -471,10 +471,19 @@ function App(){
         .filter(item=>new Date(item.sys.createdAt)>fifteenMinsAgo)
         .map(item=>{
           const f=item.fields;
-          let imageUrl=`https://picsum.photos/seed/cf-${item.sys.id}/800/450`;
+          // Use Contentful featured image if available, else curated bank
+          let imageUrl='';
+          let imageSource='curated';
           if(f.featuredImage&&data.includes){
-            const asset=data.includes.Asset?.find(a=>a.sys.id===f.featuredImage.sys.id);
-            if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
+            const asset=data.includes&&data.includes.Asset&&data.includes.Asset.find(function(a){return a.sys.id===f.featuredImage.sys.id;});
+            if(asset&&asset.fields&&asset.fields.file&&asset.fields.file.url){
+              imageUrl='https:'+asset.fields.file.url;
+              imageSource='contentful';
+            }
+          }
+          if(!imageUrl){
+            const bank=CURATED_IMAGES[config.theme||'generic']||CURATED_IMAGES.generic;
+            imageUrl=bank.articles[0]; // hero position gets articles[0]
           }
           return{
             id:item.sys.id,
@@ -486,7 +495,7 @@ function App(){
               const stripped=raw.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
               return stripped.length>160?stripped.slice(0,157)+'…':stripped;
             })(),
-            imageUrl,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
+            imageUrl,imageSource,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
             category:f.category||f.contentType||f.type||'Latest',
             readTime:'5 min read',date:item.sys.createdAt,
           };
@@ -1820,7 +1829,7 @@ function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   // Do NOT trust: old hardcoded picsum/unsplash seeds (source=picsum/gpt-paste/undefined)
   // Priority: user-supplied (manual) > real scrape/API > curated bank (recomputed)
   const userSupplied = item.imageSource==='manual' && item.imageUrl;
-  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc'].includes(item.source);
+  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc','contentful'].includes(item.source);
   const image = userSupplied
     ? item.imageUrl
     : realSource
