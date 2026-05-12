@@ -1359,14 +1359,56 @@ function ValidatePage(){
                       style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
                   </div>
 
-                  <div style={{marginBottom:10}}>
-                    <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>
-                      Jasper User ID <span style={{fontSize:10,color:'#94a3b8',fontWeight:400}}>— usr_XXXX format</span>
-                    </label>
-                    <input value={pushUserId} onChange={e=>setPushUserId(e.target.value)}
-                      placeholder="usr_11E2B663A25C4A40A1C470A2BCA97898"
-                      style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
-                  </div>
+                  {(()=>{
+                    const [wsUsers,setWsUsers]=React.useState(null);
+                    const [loadingUsers,setLoadingUsers]=React.useState(false);
+                    const [userErr,setUserErr]=React.useState('');
+                    const fetchUsers=async()=>{
+                      const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
+                      if(!apiKey){setUserErr('Add your Jasper API key in ⚙ Settings first');return;}
+                      setLoadingUsers(true);setUserErr('');
+                      try{
+                        const res=await fetch('/.netlify/functions/claude-proxy',{
+                          method:'POST',headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify({_jasperPush:true,action:'listUsers',jasperApiKey:apiKey,jasperUserId:'none'})
+                        });
+                        const d=await res.json();
+                        if(d.error){setUserErr(d.error);return;}
+                        setWsUsers(d.users||[]);
+                        if(d.users?.length===1) setPushUserId(d.users[0].id);
+                      }catch(e){setUserErr(e.message);}
+                      finally{setLoadingUsers(false);}
+                    };
+                    return(
+                      <div style={{marginBottom:10}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                          <label style={{fontSize:11,fontWeight:500,color:'#374151'}}>
+                            Jasper workspace user
+                          </label>
+                          <button onClick={fetchUsers} disabled={loadingUsers}
+                            style={{fontSize:10,color:'#6366f1',background:'#eef2ff',border:'none',borderRadius:5,padding:'3px 8px',cursor:'pointer',fontFamily:'DM Sans,sans-serif',fontWeight:500}}>
+                            {loadingUsers?'Loading…':'⟳ Load users'}
+                          </button>
+                        </div>
+                        {userErr&&<div style={{fontSize:10,color:'#dc2626',marginBottom:4}}>{userErr}</div>}
+                        {wsUsers&&wsUsers.length>0
+                          ?<select value={pushUserId} onChange={e=>setPushUserId(e.target.value)}
+                              style={{width:'100%',border:'1.5px solid #6366f1',borderRadius:7,padding:'7px 10px',fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#0f172a',outline:'none',background:'white',cursor:'pointer'}}>
+                              <option value="">— select a user —</option>
+                              {wsUsers.map(u=>(
+                                <option key={u.id} value={u.id}>
+                                  {u.email||(u.name&&u.name.trim())||u.id}
+                                </option>
+                              ))}
+                            </select>
+                          :<input value={pushUserId} onChange={e=>setPushUserId(e.target.value)}
+                            placeholder="Click 'Load users' or paste usr_XXXX"
+                            style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
+                        }
+                        {pushUserId&&<div style={{fontSize:10,color:'#94a3b8',marginTop:3,fontFamily:'monospace'}}>{pushUserId}</div>}
+                      </div>
+                    );
+                  })()}
 
                   {pushStatus&&pushStatus.startsWith('error')&&(
                     <div style={{marginBottom:8,padding:'8px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:7,fontSize:11,color:'#dc2626',fontFamily:'monospace',wordBreak:'break-all',lineHeight:1.5}}>

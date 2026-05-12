@@ -125,6 +125,19 @@ exports.handler = async (event) => {
         log('Done: docId=' + docId + ' appUrl=' + appUrl);
         return { statusCode:200, headers:H, body:JSON.stringify({ projectId, docId, appUrl, _debug:L }) };
       }
+      if (_action === 'listUsers') {
+        log('Listing Jasper users');
+        const r = await fetch('https://api.jasper.ai/v1/users', {
+          method:'GET', headers:jH,
+          signal:AbortSignal.timeout(8000),
+        });
+        const t = await r.text();
+        log('Users response: ' + r.status + ' ' + t.slice(0,120));
+        if (!r.ok) return { statusCode:r.status, headers:H, body:JSON.stringify({error:'Users: '+t.slice(0,200), _debug:L}) };
+        const d = JSON.parse(t);
+        const users = (d.data||d.users||d||[]).map(u=>({ id:u.id||u.userId||'', email:u.email||'', name:(u.firstName||'')+' '+(u.lastName||'') }));
+        return { statusCode:200, headers:H, body:JSON.stringify({ users, _debug:L }) };
+      }
       return { statusCode:400, headers:H, body:JSON.stringify({error:'unknown action: '+_action, _debug:L}) };
     } catch(err) {
       log('Jasper push error: ' + err.message);
