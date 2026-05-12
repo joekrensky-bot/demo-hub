@@ -471,10 +471,19 @@ function App(){
         .filter(item=>new Date(item.sys.createdAt)>fifteenMinsAgo)
         .map(item=>{
           const f=item.fields;
-          let imageUrl=`https://picsum.photos/seed/cf-${item.sys.id}/800/450`;
+          // Use Contentful featured image if available, else curated bank
+          let imageUrl='';
+          let imageSource='curated';
           if(f.featuredImage&&data.includes){
-            const asset=data.includes.Asset?.find(a=>a.sys.id===f.featuredImage.sys.id);
-            if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
+            const asset=data.includes&&data.includes.Asset&&data.includes.Asset.find(function(a){return a.sys.id===f.featuredImage.sys.id;});
+            if(asset&&asset.fields&&asset.fields.file&&asset.fields.file.url){
+              imageUrl='https:'+asset.fields.file.url;
+              imageSource='contentful';
+            }
+          }
+          if(!imageUrl){
+            const bank=CURATED_IMAGES[config.theme||'generic']||CURATED_IMAGES.generic;
+            imageUrl=bank.articles[0]; // hero position gets articles[0]
           }
           return{
             id:item.sys.id,
@@ -486,7 +495,7 @@ function App(){
               const stripped=raw.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
               return stripped.length>160?stripped.slice(0,157)+'…':stripped;
             })(),
-            imageUrl,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
+            imageUrl,imageSource,publishedAt:item.sys.createdAt,isNew:true,source:'contentful',
             category:f.category||f.contentType||f.type||'Latest',
             readTime:'5 min read',date:item.sys.createdAt,
           };
@@ -1636,6 +1645,20 @@ function ContentItemEditor({item,num,onChange,titleOnly}){
     </div>
   );
 }
+function MiniCard({img,accent,cardR,badgeR,isFirst,isMonospace,cardBorder,cardBg,forceDark,title}){
+  return(
+    <div style={{border:isFirst?'1.5px solid '+accent:'0.5px solid '+cardBorder,borderRadius:cardR,overflow:'hidden',background:isFirst?(forceDark?accent+'22':accent+'12'):cardBg}}>
+      <div style={{height:34,backgroundImage:img?'url('+img+')':'none',backgroundSize:'cover',backgroundPosition:'center',background:img?undefined:(forceDark?'#1e3a5f':'#f1f5f9'),position:'relative'}}>
+        {isFirst&&<span style={{position:'absolute',top:2,left:4,fontSize:8,background:accent,color:'white',padding:'1px 5px',borderRadius:badgeR,fontWeight:700}}>{isMonospace?'NEW':'✦ New'}</span>}
+      </div>
+      <div style={{padding:'4px 6px'}}>
+        <div style={{height:5,background:forceDark?'#1e3a5f':'#e2e8f0',borderRadius:2,marginBottom:2,width:'75%'}}></div>
+        <div style={{fontSize:7,opacity:0.6}}>{title}</div>
+      </div>
+    </div>
+  );
+}
+
 function MiniPreview({config:c}){
   const ts=getThemeStyles(c.theme||'generic',c);
   const cardR=ts.cardRadius;
@@ -1669,17 +1692,17 @@ function MiniPreview({config:c}){
       <div style={{padding:'16px 20px',background:ts.brandBg}}>
         <div style={{fontSize:13,fontWeight:600,color:ts.brandText,marginBottom:10,fontFamily:ts.headingFont}}>{isMonospace?'// LATEST ARTICLES':'Latest Articles'}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-          <div style={{border:`1.5px solid ${c.brandAccent}`,borderRadius:cardR,padding:8,background:ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'}}>
-            <span style={{fontSize:9,background:c.brandAccent,color:'white',padding:'2px 8px',borderRadius:badgeR,display:'inline-block',marginBottom:6,fontFamily:isMonospace?'monospace':'inherit',fontWeight:700}}>
-              {isMonospace?'NEW':'✦ New'}
-            </span>
-            <div style={{height:28,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:parseInt(cardR)>0?4:0}}></div>
-            <div style={{fontSize:8,color:ts.brandText,marginTop:4,fontFamily:isMonospace?'monospace':'inherit',opacity:0.8}}>Latest article</div>
-          </div>
-          {[1,2,3,4,5].map(i=><div key={i} style={{border:`0.5px solid ${ts.cardBorder}`,borderRadius:cardR,padding:8,background:ts.cardBg}}>
-            <div style={{height:34,background:ts.forceDark?'#1e3a5f':'#f1f5f9',borderRadius:parseInt(cardR)>0?3:0,marginBottom:4}}></div>
-            <div style={{fontSize:8,color:ts.brandText,opacity:0.6,fontFamily:isMonospace?'monospace':'inherit'}}>Article {i+1}</div>
-          </div>)}
+          {[0,1,2,3,4,5].map(function(i){
+            var bank=CURATED_IMAGES[c.theme||'generic']||CURATED_IMAGES.generic;
+            var art=(c.articles||[])[i];
+            var img=(art&&art.imageUrl)||bank.articles[i%bank.articles.length];
+            return React.createElement(MiniCard,{
+              key:i,img:img,accent:c.brandAccent,cardR:cardR,badgeR:badgeR,
+              isFirst:i===0,isMonospace:isMonospace,
+              cardBorder:ts.cardBorder,cardBg:ts.cardBg,forceDark:ts.forceDark,
+              title:(art&&art.title)||('Article '+(i+1))
+            });
+          })}
         </div>
       </div>
       {/* Footer */}
@@ -1806,7 +1829,7 @@ function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   // Do NOT trust: old hardcoded picsum/unsplash seeds (source=picsum/gpt-paste/undefined)
   // Priority: user-supplied (manual) > real scrape/API > curated bank (recomputed)
   const userSupplied = item.imageSource==='manual' && item.imageUrl;
-  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc'].includes(item.source);
+  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc','contentful'].includes(item.source);
   const image = userSupplied
     ? item.imageUrl
     : realSource
