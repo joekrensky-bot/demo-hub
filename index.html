@@ -1829,7 +1829,7 @@ function ContentCard({item,basePath,featured=false,size='normal',index=0}){
   // Do NOT trust: old hardcoded picsum/unsplash seeds (source=picsum/gpt-paste/undefined)
   // Priority: user-supplied (manual) > real scrape/API > curated bank (recomputed)
   const userSupplied = item.imageSource==='manual' && item.imageUrl;
-  const realSource = item.imageUrl && ['unsplash','scraped','firecrawl','jasper-doc','contentful'].includes(item.source);
+  const realSource = item.imageUrl && (['unsplash','scraped','firecrawl','jasper-doc','contentful'].includes(item.source)||['unsplash','scraped','firecrawl','jasper-doc','contentful'].includes(item.imageSource));
   const image = userSupplied
     ? item.imageUrl
     : realSource
@@ -1936,7 +1936,10 @@ function DemoHub(){
     return()=>clearInterval(tick);
   },[]);
 
-  const merged=[...contentfulItems,...(config.articles||[])].slice(0,6);
+  // Contentful item takes position 1, dedup rest by slug
+  const cfItem=contentfulItems&&contentfulItems[0];
+  const baseArts=(config.articles||[]).filter(function(a){return !cfItem||a.slug!==cfItem.slug;});
+  const merged=cfItem?[cfItem,...baseArts].slice(0,6):baseArts.slice(0,6);
   const newsItems=(config.news||[]).slice(0,6);
   const featuredArticle=merged[0];
   const gridArticles=merged.slice(1,7);
@@ -2010,8 +2013,9 @@ function ListingPage({type}){
   const isArticles=type==='articles';
 
   const baseItems=isArticles?(config.articles||[]):(config.news||[]);
-  const cfItems=isArticles?contentfulItems.map(i=>({...i,isNew:true})):[];
-  const all=[...cfItems,...baseItems].slice(0,7);  // contentful at front, up to 7 shown
+  const cfItem0=isArticles&&contentfulItems&&contentfulItems[0]?{...contentfulItems[0],isNew:true}:null;
+  const dedupBase=baseItems.filter(function(a){return !cfItem0||a.slug!==cfItem0.slug;});
+  const all=cfItem0?[cfItem0,...dedupBase].slice(0,7):dedupBase.slice(0,7);
 
   const cats=['All',...new Set(all.map(a=>a.category).filter(Boolean))];
   const filtered=activeCategory==='All'?all:all.filter(a=>a.category===activeCategory);
@@ -2066,8 +2070,8 @@ function DetailPage({slug,type}){
 
   // Trust stored imageUrl only if it came from a real scrape or Unsplash API.
   // Recompute everything else (old hardcoded Unsplash IDs, old picsum seeds, empty).
-  const REAL_SOURCES=['unsplash','scraped','firecrawl','jasper-doc','manual','curated'];
-  const useStoredImg=item.imageUrl&&(REAL_SOURCES.includes(item.source)||item.imageSource==='manual');
+  const REAL_SOURCES=['unsplash','scraped','firecrawl','jasper-doc','manual','curated','contentful'];
+  const useStoredImg=item.imageUrl&&(REAL_SOURCES.includes(item.source)||REAL_SOURCES.includes(item.imageSource)||item.imageSource==='manual'||item.imageSource==='contentful');
   const image=useStoredImg
     ?item.imageUrl
     :getItemImage(item.slug||item.id,item.category,0,config.theme);
