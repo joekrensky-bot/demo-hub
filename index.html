@@ -39,7 +39,7 @@ const DEFAULT_HERO_IMG  = 'https://images.unsplash.com/photo-1749371930388-50c78
 const DEFAULT_CONFIG = {
   spaceId:'b4hc9l38hrco',
   deliveryKey:'hH65WQAmS5bzyjeuWLlWvibHU5Xg0Vk8i4LXw2eEeMI',
-  jasperUserId:'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+  jasperUserId:'usr_11E2B663A25C4A40A1C470A2BCA97898',
   jasperApiKey:'',
   workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hero-article-push',
   prospectUrl:'',articleUrl:'',
@@ -585,7 +585,7 @@ function App(){
 function SettingsPanel({onClose}){
   const {config,updateConfig}=useHub();
   const [vals,setVals]=useState({
-    jasperUserId: config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+    jasperUserId: config.jasperUserId||'usr_11E2B663A25C4A40A1C470A2BCA97898',
     jasperApiKey: config.jasperApiKey||'',
     workatoWebhookUrl: config.workatoWebhookUrl||'',
     spaceId: config.spaceId||'b4hc9l38hrco',
@@ -611,7 +611,7 @@ function SettingsPanel({onClose}){
         </div>
         <div style={{marginBottom:8,paddingBottom:16,borderBottom:'1px solid #f1f5f9'}}>
           <div style={{fontSize:11,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Jasper</div>
-          {field('User ID','jasperUserId',true,'hTcTOK3m6xUCKwznLDLXwem3Y9E2')}
+          {field('User ID','jasperUserId',true,'usr_11E2B663A25C4A40A1C470A2BCA97898')}
           {field('API Key','jasperApiKey',true,'api_XXXXX:YYYYY — for pushing articles to workspace')}
         </div>
         <div style={{marginTop:16,marginBottom:8,paddingBottom:16,borderBottom:'1px solid #f1f5f9'}}>
@@ -676,7 +676,7 @@ function SetupPage(){
       body:JSON.stringify({
         url:clean, mode:scrapeMode,
         articleUrl:articleUrl.trim()||null,
-        jasperUserId:config.jasperUserId||'hTcTOK3m6xUCKwznLDLXwem3Y9E2',
+        jasperUserId:config.jasperUserId||'usr_11E2B663A25C4A40A1C470A2BCA97898',
       })
     });
     if(!res.ok) throw new Error('Proxy '+res.status+': '+await res.text());
@@ -787,12 +787,20 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     try{
       const m=raw.match(/\{[\s\S]*\}/);
       if(!m)throw new Error('No JSON object found in pasted text');
-      // Strip markdown link syntax — two passes to preserve surrounding quotes
-      const cleaned=m[0]
+      // Strip markdown link syntax — multi-pass to handle all GPT agent URL formats
+      let cleaned=m[0]
         .replace(/"\[([^\]]*)\]\(([^)]*)\)"/g,'"$2"') // "[text](url)" → "url" (quoted)
         .replace(/\[([^\]]*)\]\(([^)]*)\)/g,'$2')        // [text](url) → url (unquoted)
-        .replace(/:\s*null(?=\s*[,}\]])/g,': ""');        // null values → empty string
-      parsed=JSON.parse(cleaned);
+        .replace(/:\s*null(?=\s*[,}\]])/g,': ""')         // null values → empty string
+        .replace(/,\s*}/g,'}')                               // trailing commas
+        .replace(/,\s*]/g,']');                              // trailing commas in arrays
+      // Last resort: if still invalid, try to extract just what we need
+      try{ parsed=JSON.parse(cleaned); }
+      catch(jsonErr){
+        // Strip any remaining unquoted URLs that broke the JSON
+        cleaned=cleaned.replace(/"(https?:[^"]*)"/g,(m,u)=>'"'+u.replace(/[\[\]()]/g,'')+'"\'');
+        parsed=JSON.parse(cleaned);
+      }
     }catch(e){
       setError('Could not parse JSON: '+e.message);return;
     }
@@ -834,7 +842,24 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       const heroArticle = ha ? {
         title:    String(ha.title || ''),
         summary:  String(ha.description || ha.content_summary || ''),
-        body:     String(ha.full_content || ha.content_summary || ha.description || ''),
+        body:     (()=>{
+          const raw=String(ha.full_content || ha.content_summary || ha.description || '');
+          // Convert plain text to HTML for Jasper:
+          // Lines starting with ## → <h2>, ### → <h3>, blank lines → paragraph breaks
+          if(raw.includes('<p>')||raw.includes('<h')) return raw; // already HTML
+          return raw
+            .split('\n\n')
+            .map(para=>{
+              const t=para.trim();
+              if(!t) return '';
+              if(t.startsWith('### ')) return '<h3>'+t.slice(4)+'</h3>';
+              if(t.startsWith('## ')) return '<h2>'+t.slice(3)+'</h2>';
+              if(t.startsWith('# ')) return '<h1>'+t.slice(2)+'</h1>';
+              return '<p>'+t.replace(/\n/g,' ')+'</p>';
+            })
+            .filter(Boolean)
+            .join('\n');
+        })(),
         slug:     (s=>s&&!s.includes('.')?s:(ha.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60))((ha.url||'').split('/').filter(Boolean).pop()),
         category: 'Featured',
         date:     String(ha.date || ''),
@@ -1175,15 +1200,13 @@ function ValidatePage(){
     setPushing(true);setPushStatus('pushing');
     try{
       const rawBody=String(heroArt.body||heroArt.summary||heroArt.title||'');
+      // Send clean HTML to Jasper — it renders headings and paragraphs natively
       const cleanBody=rawBody
-        .replace(/<\/p>/gi,'\n\n')       // closing </p> → paragraph break
-        .replace(/<br\s*\/?>/gi,'\n')     // <br> → line break
-        .replace(/<h[1-6][^>]*>/gi,'\n\n') // headings get spacing before
-        .replace(/<\/h[1-6]>/gi,'\n')      // headings get newline after
-        .replace(/<li[^>]*>/gi,'\n• ')      // list items
-        .replace(/<[^>]*>/g,'')              // strip all remaining tags
+        // Normalise entity refs
         .replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ')
-        .replace(/\n{3,}/g,'\n\n')         // max 2 consecutive newlines
+        // If body is already HTML (has tags), send as-is with light cleanup
+        // If body is plain text, wrap paragraphs
+        .replace(/\n{3,}/g,'\n\n') // max 2 blank lines
         .trim();
       let pushRes;
       if(workatoUrl){
