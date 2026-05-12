@@ -1,7 +1,6 @@
         <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0'}}>
           <button onClick={handleGenerate}
-            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#0f172a',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}
-            onMouseOver={e=>e.currentTarget.style.background='#1e293b'} onMouseOut={e=>e.currentTarget.style.background='#0f172a'}>
+            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#0f172a',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}>
             🚀 Generate Hub
           </button>
         </div><!DOCTYPE html>
@@ -1363,11 +1362,22 @@ function ValidatePage(){
                   </div>
 
                   <div style={{marginBottom:10}}>
+                    {/* Inline API key for load users */}
+                    <div style={{marginBottom:8}}>
+                      <label style={{fontSize:11,fontWeight:500,color:'#374151',marginBottom:4,display:'block'}}>
+                        Jasper API key <span style={{fontSize:10,color:'#94a3b8',fontWeight:400}}>— for loading users</span>
+                      </label>
+                      <input
+                        defaultValue={local.jasperApiKey||config.jasperApiKey||''}
+                        onChange={e=>setLocal(p=>({...p,jasperApiKey:e.target.value}))}
+                        placeholder="api_XXXXX:YYYYY"
+                        style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:7,padding:'7px 10px',fontSize:11,fontFamily:'monospace',color:'#0f172a',outline:'none',background:'white'}}/>
+                    </div>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                       <label style={{fontSize:11,fontWeight:500,color:'#374151'}}>Jasper workspace user</label>
                       <button onClick={async()=>{
                           const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
-                          if(!apiKey){setUserErr('Add Jasper API key in ⚙ Settings first');return;}
+                          if(!apiKey){setUserErr('Add Jasper API key above first');return;}
                           setLoadingUsers(true);setUserErr('');
                           try{
                             const res=await fetch('/.netlify/functions/claude-proxy',{
