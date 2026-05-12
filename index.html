@@ -787,10 +787,11 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
     try{
       const m=raw.match(/\{[\s\S]*\}/);
       if(!m)throw new Error('No JSON object found in pasted text');
-      // Strip markdown link syntax [text](url) → url, and [text](url) in values → url
+      // Strip markdown link syntax — two passes to preserve surrounding quotes
       const cleaned=m[0]
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'$2') // [text](url) → url
-        .replace(/null(?=\s*[,}])/g,'""');           // null values → empty string
+        .replace(/"\[([^\]]*)\]\(([^)]*)\)"/g,'"$2"') // "[text](url)" → "url" (quoted)
+        .replace(/\[([^\]]*)\]\(([^)]*)\)/g,'$2')        // [text](url) → url (unquoted)
+        .replace(/:\s*null(?=\s*[,}\]])/g,': ""');        // null values → empty string
       parsed=JSON.parse(cleaned);
     }catch(e){
       setError('Could not parse JSON: '+e.message);return;
