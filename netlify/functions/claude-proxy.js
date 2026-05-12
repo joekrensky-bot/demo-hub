@@ -102,8 +102,10 @@ exports.handler = async (event) => {
         log('Project response: ' + pRes.status + ' ' + pText.slice(0,120));
         if (!pRes.ok) return { statusCode:pRes.status, headers:H, body:JSON.stringify({error:'Project: '+pText.slice(0,200), _debug:L}) };
         const pData = JSON.parse(pText);
-        const proj = pData.data || pData;
-        const projectId = proj.id || '';
+        // data is an array per the spec: { data: [{ id, name, userId }] }
+        const projArr = pData.data || pData;
+        const proj = Array.isArray(projArr) ? projArr[0] : projArr;
+        const projectId = proj.id || proj.projectId || '';
         log('Project id: ' + projectId);
 
         // Step 2: create document inside the project
@@ -135,7 +137,8 @@ exports.handler = async (event) => {
         log('Users response: ' + r.status + ' ' + t.slice(0,120));
         if (!r.ok) return { statusCode:r.status, headers:H, body:JSON.stringify({error:'Users: '+t.slice(0,200), _debug:L}) };
         const d = JSON.parse(t);
-        const users = (d.data||d.users||d||[]).map(u=>({ id:u.id||u.userId||'', email:u.email||'', name:(u.firstName||'')+' '+(u.lastName||'') }));
+        const arr = Array.isArray(d.data) ? d.data : (Array.isArray(d.users) ? d.users : Array.isArray(d) ? d : []);
+        const users = arr.map(u=>({ id:u.id||u.userId||'', email:u.email||'', name:((u.firstName||'')+' '+(u.lastName||'')).trim() }));
         return { statusCode:200, headers:H, body:JSON.stringify({ users, _debug:L }) };
       }
       return { statusCode:400, headers:H, body:JSON.stringify({error:'unknown action: '+_action, _debug:L}) };
