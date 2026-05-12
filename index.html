@@ -1,7 +1,7 @@
-        <div style={{padding:'16px 24px',borderTop:'1px solid #e2e8f0'}}>
+        <div style={{padding:'12px 24px',borderTop:'1px solid #e2e8f0',display:'flex',gap:8}}>
           <button onClick={handleGenerate}
-            style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#0f172a',color:'white',border:'none',borderRadius:12,padding:14,fontSize:15,fontWeight:600,cursor:'pointer'}}>
-            🚀 Generate Hub
+            style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:'#f8fafc',color:'#64748b',border:'1px solid #e2e8f0',borderRadius:10,padding:'10px',fontSize:13,fontWeight:500,cursor:'pointer'}}>
+            Skip → Generate Hub
           </button>
         </div><!DOCTYPE html>
 <html lang="en">
@@ -1176,7 +1176,7 @@ function ValidatePage(){
     setPushing(true);setPushStatus('pushing');
     try{
       const rawBody=String(heroArt.body||heroArt.summary||heroArt.title||'');
-      const cleanBody=rawBody.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+      const cleanBody=rawBody.replace(/<[^>]*>/g,' ').replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
       let pushRes;
       if(workatoUrl){
         setPushStatus('Sending to Workato…');
@@ -1330,8 +1330,10 @@ function ValidatePage(){
 
                 <Section title="Article body">
                   <div style={{fontSize:11,color:'#94a3b8',marginBottom:8,lineHeight:1.5}}>Supports markdown — use ## for headings, **bold**, *italic*, &gt; blockquotes, - lists.</div>
-                  <textarea value={hero.body||''} onChange={e=>setHero({...hero,body:e.target.value})}
-                    placeholder="Full article body (markdown or HTML)..."
+                  <textarea
+                    value={(hero.body||'').replace(/<[^>]+>/g,'').replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/\n\s*\n/g,'\n\n').trim()}
+                    onChange={e=>setHero({...hero,body:e.target.value})}
+                    placeholder="Full article body (markdown supported)..."
                     rows={10}
                     style={{width:'100%',border:'1.5px solid #e2e8f0',borderRadius:8,padding:'10px 12px',fontSize:12,
                       fontFamily:'monospace',outline:'none',color:'#0f172a',background:'white',resize:'vertical',lineHeight:1.6}}/>
