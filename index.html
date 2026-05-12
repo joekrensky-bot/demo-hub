@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone@7.22.5/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--brand-primary:#0f172a;--brand-accent:#6366f1;--brand-bg:#ffffff;--brand-text:#0f172a;--brand-header-text:#ffffff;--font-sans:'DM Sans',sans-serif;--font-serif:'DM Serif Display',serif;}
@@ -42,7 +42,6 @@ const DEFAULT_CONFIG = {
   jasperUserId:'usr_11E2B663A25C4A40A1C470A2BCA97898',
   jasperApiKey:'',
   workatoWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/hero-article-push',
-  contentfulWebhookUrl:'https://webhooks.workato.com/webhooks/rest/d0d61251-d9f0-4a9b-8c4e-1bea048d1afa/contentfulpush',
   prospectUrl:'',articleUrl:'',
   brandPrimary:'#FF4F00',brandAccent:'#FF4F00',
   brandBg:'#ffffff',brandText:'#0f172a',brandHeaderText:'#ffffff',
@@ -474,8 +473,8 @@ function App(){
           const f=item.fields;
           let imageUrl=`https://picsum.photos/seed/cf-${item.sys.id}/800/450`;
           if(f.featuredImage&&data.includes){
-            const asset=((data.includes&&data.includes.Asset)||[]).find(a=>a.sys.id===f.featuredImage.sys.id);
-            if(asset&&asset.fields&&asset.fields.file&&asset.fields.file.url)imageUrl='https:'+asset.fields.file.url;
+            const asset=data.includes.Asset?.find(a=>a.sys.id===f.featuredImage.sys.id);
+            if(asset?.fields?.file?.url)imageUrl='https:'+asset.fields.file.url;
           }
           return{
             id:item.sys.id,
@@ -508,9 +507,6 @@ function App(){
   // Enrich images with Unsplash after hub loads (non-blocking)
   useEffect(()=>{
     if(!config.generated)return;
-    // Only enrich with Unsplash for scraped hubs — gpt-paste/manual use curated images
-    const isScraped=(config.articles||[]).some(a=>a.source==='scraped'||a.source==='firecrawl');
-    if(!isScraped)return;
     const UNSPLASH_KEY='Rtko1nJ89-XlX5QfMqnp4ovSkMD37uAo5mApAwQlGHY';
     const needsEnrichment=(items)=>items.some(a=>a.imageSource==='fallback'||!a.imageSource);
     if(!needsEnrichment(config.articles||[])&&!needsEnrichment(config.news||[]))return;
@@ -533,9 +529,9 @@ function App(){
         const r=await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=landscape&content_filter=high&per_page=10&client_id=${UNSPLASH_KEY}`);
         if(!r.ok)return null;
         const d=await r.json();
-        const results=(d&&d.results)||[];
+        const results=d?.results||[];
         if(!results.length)return null;
-        return (results[seed%results.length]&&results[seed%results.length].urls&&results[seed%results.length].urls.regular)||null;
+        return results[seed%results.length]?.urls?.regular||null;
       }catch{return null;}
     };
     const enrich=async()=>{
@@ -847,14 +843,14 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
         if(typeof v==='string'&&v.startsWith('#')) return v;
         if(typeof v==='string'&&v.match(/^#[0-9a-fA-F]{3,6}$/)) return v;
         if(typeof v==='string'&&v.length>0&&!v.startsWith('http')) return null;
-        return (v&&v.hex)||null;
+        return v?.hex||null;
       };
       // For array format: primary[0]=brand color, primary[1]=dark, primary[2]=light
       const ci_primary_arr = Array.isArray(ci.primary) ? ci.primary : null;
       // Array format: primary[0]=brand/accent, primary[1]=dark/nav, primary[2]=light/bg
-      brandPrimary = String(ci_primary_arr&&ci_primary_arr[1]&&ci_primary_arr[1].startsWith('#')?ci_primary_arr[1]:null || hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
-      brandAccent  = String(ci_primary_arr&&ci_primary_arr[0]&&ci_primary_arr[0].startsWith('#')?ci_primary_arr[0]:null || hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
-      brandBg      = String(ci_primary_arr&&ci_primary_arr[2]&&ci_primary_arr[2].startsWith('#')?ci_primary_arr[2]:null || hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
+      brandPrimary = String(ci_primary_arr?.[1]&&ci_primary_arr[1].startsWith('#')?ci_primary_arr[1]:null || hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
+      brandAccent  = String(ci_primary_arr?.[0]&&ci_primary_arr[0].startsWith('#')?ci_primary_arr[0]:null || hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
+      brandBg      = String(ci_primary_arr?.[2]&&ci_primary_arr[2].startsWith('#')?ci_primary_arr[2]:null || hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
       brandText    = String(hexOf(ci.text) || '#1c1c1c');
 
       // blogs → articles, news → news
@@ -937,7 +933,7 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
 
     const bp = brandPrimary;
     // hero image: use hero_article image_url if present, else default
-    const heroImgUrl = (parsed.hero_article&&parsed.hero_article.image_url) || '';
+    const heroImgUrl = (parsed.hero_article?.image_url) || '';
     const bank = CURATED_IMAGES.generic; // will be refined by theme in ValidatePage
     updateConfig({
       ...DEFAULT_CONFIG,
@@ -1197,9 +1193,7 @@ function ValidatePage(){
   const [pushStatus,setPushStatus]=useState('');
   const [wsUsers,setWsUsers]=useState(null);
   const [loadingUsers,setLoadingUsers]=useState(false);
-  const [userErr,setUserErr]=useState('');
-  const [cfSending,setCfSending]=useState(false);
-  const [cfSent,setCfSent]=useState(''); // ''|'pushing'|'done'|'error:...'
+  const [userErr,setUserErr]=useState(''); // ''|'pushing'|'done'|'error:...'
   const [pushUserId,setPushUserId]=useState(local.jasperUserId||config.jasperUserId||'');
   const [pushWebhookUrl,setPushWebhookUrl]=useState(
     local.workatoWebhookUrl||config.workatoWebhookUrl||
@@ -1207,7 +1201,7 @@ function ValidatePage(){
   );
 
   const handleJasperPush=async()=>{
-    const heroArt=local.articles&&local.articles[0];
+    const heroArt=local.articles?.[0];
     if(!heroArt){setPushStatus('error:No hero article found');return;}
     const workatoUrl=pushWebhookUrl.trim();
     const apiKey=(local.jasperApiKey||config.jasperApiKey||'').trim();
@@ -1313,7 +1307,7 @@ function ValidatePage(){
           {tab==='brand'&&<>
             <Section title="Design Theme">
               <ThemeToggle value={local.theme||'generic'} onChange={v=>{const bank=CURATED_IMAGES[v]||CURATED_IMAGES.generic;const defaultHeros=Object.values(CURATED_IMAGES).map(b=>b.hero);const heroIsDefault=!local.heroImageUrl||defaultHeros.includes(local.heroImageUrl)||local.heroImageUrl===DEFAULT_HERO_IMG;setLocal(p=>({...p,theme:v,heroImageUrl:heroIsDefault?bank.hero:p.heroImageUrl}));}}/>
-              <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{(THEMES[local.theme||'generic']&&THEMES[local.theme||'generic'].description)||''}</div>
+              <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{THEMES[local.theme||'generic']?.description}</div>
             </Section>
             <Section title="Colors">
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -1358,7 +1352,7 @@ function ValidatePage(){
           </>}
 
           {tab==='hero'&&(()=>{
-            const hero=local.articles&&local.articles[0]||{};
+            const hero=local.articles?.[0]||{};
             const setHero=updated=>{
               const next=[...( local.articles||[])];
               next[0]=updated;
@@ -1448,7 +1442,7 @@ function ValidatePage(){
                             const d=await res.json();
                             if(d.error){setUserErr(String(d.error));return;}
                             setWsUsers(d.users||[]);
-                            if(d.users&&d.users.length===1) setPushUserId(d.users[0].id);
+                            if(d.users?.length===1) setPushUserId(d.users[0].id);
                           }catch(e){setUserErr(e.message);}
                           finally{setLoadingUsers(false);}
                         }} disabled={loadingUsers}
@@ -1510,14 +1504,14 @@ function ValidatePage(){
           })()}
 
           {tab==='content'&&<>
-            <Section title={`Articles (${(local.articles&&local.articles.length)||0})`}>
+            <Section title={`Articles (${local.articles?.length||0})`}>
               {(local.articles||[]).map((art,i)=>(
                 <ContentItemEditor key={i} item={art} num={i+1} onChange={updated=>{
                   const next=[...local.articles];next[i]=updated;set('articles')(next);
                 }}/>
               ))}
             </Section>
-            <Section title={`News (${(local.news&&local.news.length)||0})`}>
+            <Section title={`News (${local.news?.length||0})`}>
               {(local.news||[]).map((item,i)=>(
                 <ContentItemEditor key={i} item={item} num={i+1} titleOnly onChange={updated=>{
                   const next=[...local.news];next[i]=updated;set('news')(next);
@@ -1552,39 +1546,6 @@ function ValidatePage(){
         </div>
         <MiniPreview config={local}/>
         <p style={{marginTop:14,fontSize:12,color:'#94a3b8',textAlign:'center',maxWidth:400}}>Preview updates as you edit. The final hub will include full pages and real content.</p>
-
-        {/* ── Subtle extra actions ── */}
-        <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:6,width:'100%',maxWidth:400}}>
-          {(local.contentfulWebhookUrl||config.contentfulWebhookUrl)&&(
-            <button onClick={async()=>{
-                const url=(local.contentfulWebhookUrl||config.contentfulWebhookUrl||'').trim();
-                if(!url)return;
-                setCfSending(true);setCfSent('');
-                try{
-                  const res=await fetch('/.netlify/functions/claude-proxy',{
-                    method:'POST',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({
-                      _workatoPush:true,
-                      workatoWebhookUrl:url,
-                      companyName:local.companyName||'',
-                      articleTitle:(local.articles&&local.articles[0]&&local.articles[0].title)||'',
-                      articleContent:((local.articles&&local.articles[0]&&(local.articles[0].body||local.articles[0].summary))||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
-                      userId:local.jasperUserId||config.jasperUserId||'',
-                    })
-                  });
-                  const d=await res.json();
-                  setCfSent(d.success||res.ok?'✓ Sent':'⚠ '+(d.error||'failed').toString().slice(0,60));
-                }catch(e){setCfSent('⚠ '+e.message);}
-                finally{setCfSending(false);}
-              }} disabled={cfSending} title="Push to Contentful via Workato"
-              style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'1px solid #e2e8f0',
-                borderRadius:8,padding:'6px 10px',fontSize:11,color:cfSent.startsWith('✓')?'#16a34a':'#94a3b8',
-                cursor:'pointer',fontFamily:'DM Sans,sans-serif',alignSelf:'flex-start'}}>
-              <span style={{fontSize:14}}>{cfSending?'⏳':'🛩'}</span>
-              <span>{cfSending?'Sending…':cfSent||'Push to Contentful'}</span>
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -1708,26 +1669,19 @@ function MiniPreview({config:c}){
       <div style={{padding:'16px 20px',background:ts.brandBg}}>
         <div style={{fontSize:13,fontWeight:600,color:ts.brandText,marginBottom:10,fontFamily:ts.headingFont}}>{isMonospace?'// LATEST ARTICLES':'Latest Articles'}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-          {[0,1,2,3,4,5].map(function(i){
-            var art=(c.articles||[])[i];
-            var bank=CURATED_IMAGES[c.theme||'generic']||CURATED_IMAGES.generic;
-            var imgUrl=(art&&art.imageUrl)||(bank.articles[i%bank.articles.length]);
-            var isFirst=i===0;
-            return(
-              <div key={i} style={{border:isFirst?'1.5px solid '+c.brandAccent:'0.5px solid '+ts.cardBorder,borderRadius:cardR,overflow:'hidden',background:isFirst?(ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'):ts.cardBg}}>
-                <div style={{height:36,backgroundImage:'url('+imgUrl+')',backgroundSize:'cover',backgroundPosition:'center',position:'relative'}}>
-                  {isFirst&&<span style={{position:'absolute',top:3,left:4,fontSize:8,background:c.brandAccent,color:'white',padding:'1px 5px',borderRadius:badgeR,fontWeight:700}}>{isMonospace?'NEW':'✦ New'}</span>}
-                </div>
-                <div style={{padding:'4px 6px'}}>
-                  <div style={{height:6,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:2,marginBottom:3,width:'80%'}}></div>
-                  <div style={{fontSize:7,color:ts.brandText,opacity:0.7,fontFamily:isMonospace?'monospace':'inherit',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                    {(art&&art.title)||('Article '+(i+1))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <div style={{border:`1.5px solid ${c.brandAccent}`,borderRadius:cardR,padding:8,background:ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'}}>
+            <span style={{fontSize:9,background:c.brandAccent,color:'white',padding:'2px 8px',borderRadius:badgeR,display:'inline-block',marginBottom:6,fontFamily:isMonospace?'monospace':'inherit',fontWeight:700}}>
+              {isMonospace?'NEW':'✦ New'}
+            </span>
+            <div style={{height:28,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:parseInt(cardR)>0?4:0}}></div>
+            <div style={{fontSize:8,color:ts.brandText,marginTop:4,fontFamily:isMonospace?'monospace':'inherit',opacity:0.8}}>Latest article</div>
+          </div>
+          {[1,2,3,4,5].map(i=><div key={i} style={{border:`0.5px solid ${ts.cardBorder}`,borderRadius:cardR,padding:8,background:ts.cardBg}}>
+            <div style={{height:34,background:ts.forceDark?'#1e3a5f':'#f1f5f9',borderRadius:parseInt(cardR)>0?3:0,marginBottom:4}}></div>
+            <div style={{fontSize:8,color:ts.brandText,opacity:0.6,fontFamily:isMonospace?'monospace':'inherit'}}>Article {i+1}</div>
+          </div>)}
         </div>
+      </div>
       {/* Footer */}
       <div style={{background:ts.forceDark?'#0a0f1a':c.brandPrimary,padding:'8px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:ts.forceDark?'1px solid #1e3a5f':'none'}}>
         <span style={{fontSize:10,color:navText,opacity:0.5,fontFamily:isMonospace?'monospace':'inherit'}}>© {c.companyName}</span>
@@ -1833,28 +1787,6 @@ function HubLayout({children}){
             </button>
           ))}
         </div>
-        {(config.contentfulWebhookUrl)&&(
-          <button onClick={async()=>{
-              const url=config.contentfulWebhookUrl.trim();
-              const a0=config.articles&&config.articles[0];
-              try{
-                await fetch('/.netlify/functions/claude-proxy',{
-                  method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({
-                    _workatoPush:true,
-                    workatoWebhookUrl:url,
-                    companyName:config.companyName||'',
-                    articleTitle:(a0&&a0.title)||'',
-                    articleContent:((a0&&(a0.body||a0.summary))||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),
-                    userId:config.jasperUserId||'',
-                  })
-                });
-              }catch(e){console.error('Contentful push:',e);}
-            }} title="Push to Contentful"
-            style={{width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:16}}>
-            🛩
-          </button>
-        )}
         <button onClick={()=>navigate('/setup')} title="Back to hub builder"
           style={{width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#64748b',fontSize:16}}>
           ⚙
@@ -2177,7 +2109,7 @@ function NewsDetail({slug}){return <DetailPage slug={slug} type="news"/>;}
 function ProductsPage(){
   const {config}=useHub();
   const [openIdx,setOpenIdx]=useState(null);
-  const products=config.products&&config.products.length?config.products:[
+  const products=config.products?.length?config.products:[
     {name:'Core Platform',description:'Our flagship solution built for teams that need speed, accuracy, and scale.',cta:'Learn more'},
     {name:'Enterprise Suite',description:'Advanced features for large organizations including SSO, admin controls, and dedicated support.',cta:'Request demo'},
     {name:'API Access',description:'Integrate directly into your existing workflows with our developer-friendly REST API.',cta:'View docs'},
