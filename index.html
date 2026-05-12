@@ -863,19 +863,14 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
           const raw=String(ha.full_content || ha.content_summary || ha.description || '');
           // Convert plain text to HTML for Jasper:
           // Lines starting with ## → <h2>, ### → <h3>, blank lines → paragraph breaks
-          if(raw.includes('<p>')||raw.includes('<h')) return raw; // already HTML
+          // Keep as plain text — Jasper API doesn't render HTML
+          // Strip markdown heading syntax but preserve the text
           return raw
-            .split('\n\n')
-            .map(para=>{
-              const t=para.trim();
-              if(!t) return '';
-              if(t.startsWith('### ')) return '<h3>'+t.slice(4)+'</h3>';
-              if(t.startsWith('## ')) return '<h2>'+t.slice(3)+'</h2>';
-              if(t.startsWith('# ')) return '<h1>'+t.slice(2)+'</h1>';
-              return '<p>'+t.replace(/\n/g,' ')+'</p>';
-            })
-            .filter(Boolean)
-            .join('\n');
+            .replace(/^#{1,6}\s+/gm,'')  // remove # heading prefixes
+            .replace(/\*\*(.*?)\*\*/g,'$1') // remove **bold**
+            .replace(/\*(.*?)\*/g,'$1')   // remove *italic*
+            .replace(/\n{3,}/g,'\n\n')   // max double newline
+            .trim();
         })(),
         slug:     (s=>s&&!s.includes('.')?s:(ha.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60))((ha.url||'').split('/').filter(Boolean).pop()),
         category: 'Featured',
@@ -1217,14 +1212,24 @@ function ValidatePage(){
     setPushing(true);setPushStatus('pushing');
     try{
       const rawBody=String(heroArt.body||heroArt.summary||heroArt.title||'');
-      // Send clean HTML to Jasper — it renders headings and paragraphs natively
-      const cleanBody=rawBody
-        // Normalise entity refs
-        .replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ')
-        // If body is already HTML (has tags), send as-is with light cleanup
-        // If body is plain text, wrap paragraphs
-        .replace(/\n{3,}/g,'\n\n') // max 2 blank lines
-        .trim();
+      // Jasper API content field is plain text — strip HTML, preserve paragraph structure
+      const cleanBody=(()=>{
+        let t=rawBody
+          .replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ');
+        if(t.includes('<')){ 
+          // Convert HTML structure to plain text with spacing
+          t=t
+            .replace(/<h[1-6][^>]*>/gi,'\n\n')   // heading open → blank line before
+            .replace(/<\/h[1-6]>/gi,'\n\n')       // heading close → blank line after
+            .replace(/<\/p>/gi,'\n\n')             // </p> → paragraph break
+            .replace(/<br\s*\/?>/gi,'\n')          // <br> → line break
+            .replace(/<li[^>]*>/gi,'\n• ')           // list item → bullet
+            .replace(/<[^>]+>/g,'')                  // strip all remaining tags
+            .replace(/\n{3,}/g,'\n\n')             // max double newline
+            .trim();
+        }
+        return t.replace(/\n{3,}/g,'\n\n').trim();
+      })();
       let pushRes;
       if(workatoUrl){
         setPushStatus('Sending to Workato…');
