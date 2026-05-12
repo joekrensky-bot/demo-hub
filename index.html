@@ -508,6 +508,9 @@ function App(){
   // Enrich images with Unsplash after hub loads (non-blocking)
   useEffect(()=>{
     if(!config.generated)return;
+    // Only enrich with Unsplash for scraped hubs — gpt-paste/manual use curated images
+    const isScraped=(config.articles||[]).some(a=>a.source==='scraped'||a.source==='firecrawl');
+    if(!isScraped)return;
     const UNSPLASH_KEY='Rtko1nJ89-XlX5QfMqnp4ovSkMD37uAo5mApAwQlGHY';
     const needsEnrichment=(items)=>items.some(a=>a.imageSource==='fallback'||!a.imageSource);
     if(!needsEnrichment(config.articles||[])&&!needsEnrichment(config.news||[]))return;
@@ -1705,19 +1708,29 @@ function MiniPreview({config:c}){
       <div style={{padding:'16px 20px',background:ts.brandBg}}>
         <div style={{fontSize:13,fontWeight:600,color:ts.brandText,marginBottom:10,fontFamily:ts.headingFont}}>{isMonospace?'// LATEST ARTICLES':'Latest Articles'}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-          <div style={{border:`1.5px solid ${c.brandAccent}`,borderRadius:cardR,padding:8,background:ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'}}>
-            <span style={{fontSize:9,background:c.brandAccent,color:'white',padding:'2px 8px',borderRadius:badgeR,display:'inline-block',marginBottom:6,fontFamily:isMonospace?'monospace':'inherit',fontWeight:700}}>
-              {isMonospace?'NEW':'✦ New'}
-            </span>
-            <div style={{height:28,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:parseInt(cardR)>0?4:0}}></div>
-            <div style={{fontSize:8,color:ts.brandText,marginTop:4,fontFamily:isMonospace?'monospace':'inherit',opacity:0.8}}>Latest article</div>
-          </div>
-          {[1,2,3,4,5].map(i=><div key={i} style={{border:`0.5px solid ${ts.cardBorder}`,borderRadius:cardR,padding:8,background:ts.cardBg}}>
-            <div style={{height:34,background:ts.forceDark?'#1e3a5f':'#f1f5f9',borderRadius:parseInt(cardR)>0?3:0,marginBottom:4}}></div>
-            <div style={{fontSize:8,color:ts.brandText,opacity:0.6,fontFamily:isMonospace?'monospace':'inherit'}}>Article {i+1}</div>
-          </div>)}
+          {(()=>{
+            const arts=c.articles||[];
+            const bank=CURATED_IMAGES[c.theme||'generic']||CURATED_IMAGES.generic;
+            return [0,1,2,3,4,5].map(i=>{
+              const art=arts[i];
+              const imgUrl=art?.imageUrl||(i<bank.articles.length?bank.articles[i]:bank.articles[0]);
+              const isFirst=i===0;
+              return(
+                <div key={i} style={{border:isFirst?`1.5px solid ${c.brandAccent}`:`0.5px solid ${ts.cardBorder}`,borderRadius:cardR,overflow:'hidden',background:isFirst?(ts.forceDark?c.brandAccent+'22':c.brandAccent+'12'):ts.cardBg}}>
+                  <div style={{height:36,background:`url(${imgUrl}) center/cover`,position:'relative'}}>
+                    {isFirst&&<span style={{position:'absolute',top:3,left:4,fontSize:8,background:c.brandAccent,color:'white',padding:'1px 5px',borderRadius:badgeR,fontWeight:700}}>{isMonospace?'NEW':'✦ New'}</span>}
+                  </div>
+                  <div style={{padding:'4px 6px'}}>
+                    <div style={{height:6,background:ts.forceDark?'#1e3a5f':'#e2e8f0',borderRadius:2,marginBottom:3,width:'80%'}}></div>
+                    <div style={{fontSize:7,color:ts.brandText,opacity:0.7,fontFamily:isMonospace?'monospace':'inherit',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                      {art?.title||('Article '+(i+1))}
+                    </div>
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
-      </div>
       {/* Footer */}
       <div style={{background:ts.forceDark?'#0a0f1a':c.brandPrimary,padding:'8px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:ts.forceDark?'1px solid #1e3a5f':'none'}}>
         <span style={{fontSize:10,color:navText,opacity:0.5,fontFamily:isMonospace?'monospace':'inherit'}}>© {c.companyName}</span>
@@ -1823,6 +1836,27 @@ function HubLayout({children}){
             </button>
           ))}
         </div>
+        {(config.contentfulWebhookUrl)&&(
+          <button onClick={async()=>{
+              const url=config.contentfulWebhookUrl.trim();
+              try{
+                await fetch('/.netlify/functions/claude-proxy',{
+                  method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({
+                    _workatoPush:true,
+                    workatoWebhookUrl:url,
+                    companyName:config.companyName||'',
+                    articleTitle:config.articles?.[0]?.title||'',
+                    articleContent:(config.articles?.[0]?.body||config.articles?.[0]?.summary||'').replace(/<[^>]*>/g,' ').replace(/[ \t]+/g,' ').trim(),
+                    userId:config.jasperUserId||'',
+                  })
+                });
+              }catch(e){console.error('Contentful push:',e);}
+            }} title="Push to Contentful"
+            style={{width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:16}}>
+            🛩
+          </button>
+        )}
         <button onClick={()=>navigate('/setup')} title="Back to hub builder"
           style={{width:36,height:36,borderRadius:'50%',background:'white',border:'1px solid #e2e8f0',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#64748b',fontSize:16}}>
           ⚙
