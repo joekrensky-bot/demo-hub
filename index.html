@@ -474,8 +474,10 @@ function App(){
           // Use Contentful featured image if available, else curated bank
           let imageUrl='';
           let imageSource='curated';
-          if(f.featuredImage&&data.includes){
-            const asset=data.includes&&data.includes.Asset&&data.includes.Asset.find(function(a){return a.sys.id===f.featuredImage.sys.id;});
+          // Try all common Contentful image field names
+          var imgRef=f.image||f.featuredImage||f.heroImage||f.thumbnail||f.coverImage||f.photo||null;
+          if(imgRef&&imgRef.sys&&data.includes&&data.includes.Asset){
+            const asset=data.includes.Asset.find(function(a){return a.sys.id===imgRef.sys.id;});
             if(asset&&asset.fields&&asset.fields.file&&asset.fields.file.url){
               imageUrl='https:'+asset.fields.file.url;
               imageSource='contentful';
