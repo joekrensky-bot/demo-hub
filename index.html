@@ -839,13 +839,18 @@ Company: [REPLACE WITH COMPANY NAME OR URL]`;
       // Handle both formats + null values + observed_palette arrays
       const hexOf = v => {
         if(!v||v==='null'||v==='""') return null;
+        if(Array.isArray(v)) return hexOf(v[0]); // ["#FF4F1F","#111"] → first hex
         if(typeof v==='string'&&v.startsWith('#')) return v;
-        if(typeof v==='string'&&v.length>0&&!v.startsWith('http')) return null; // named color like 'black'
+        if(typeof v==='string'&&v.match(/^#[0-9a-fA-F]{3,6}$/)) return v;
+        if(typeof v==='string'&&v.length>0&&!v.startsWith('http')) return null;
         return v?.hex||null;
       };
-      brandPrimary = String(hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
-      brandAccent  = String(hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
-      brandBg      = String(hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
+      // For array format: primary[0]=brand color, primary[1]=dark, primary[2]=light
+      const ci_primary_arr = Array.isArray(ci.primary) ? ci.primary : null;
+      // Array format: primary[0]=brand/accent, primary[1]=dark/nav, primary[2]=light/bg
+      brandPrimary = String(ci_primary_arr?.[1]&&ci_primary_arr[1].startsWith('#')?ci_primary_arr[1]:null || hexOf(ci.dark) || hexOf(ci.secondary) || hexOf(ci.primary) || '#0f172a');
+      brandAccent  = String(ci_primary_arr?.[0]&&ci_primary_arr[0].startsWith('#')?ci_primary_arr[0]:null || hexOf(ci.primary) || hexOf(ci.accent) || '#6366f1');
+      brandBg      = String(ci_primary_arr?.[2]&&ci_primary_arr[2].startsWith('#')?ci_primary_arr[2]:null || hexOf(ci.light) || hexOf(ci.background) || '#ffffff');
       brandText    = String(hexOf(ci.text) || '#1c1c1c');
 
       // blogs → articles, news → news
