@@ -193,141 +193,90 @@ exports.handler = async (event) => {
 
   if (manual) {
     log('MANUAL mode for: ' + url);
-
-
-    // images handled by module-level getUnsplashImg / picsumFallback
-
     try {
       const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
-      log('GPT manual content for: ' + co);
+      log('GPT+images start for: ' + co);
 
-      const prompt = `Generate a realistic content hub demo for a company called "${co}".
-Return ONLY a valid JSON object, no markdown, no explanation:
-{
-  "articles": [
-    {"title":"","summary":"2-sentence summary","category":"one of Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen"},
-    ...6 total
-  ],
-  "news": [
-    {"title":"","summary":"1 sentence","slug":"lowercase-hyphen"},
-    ...6 total
-  ],
-  "aboutText": "2 paragraphs about the ${co} content hub, professional tone"
-}
-Make content feel authentic to ${co}'s industry. Return ONLY the JSON object.`;
+      // ── GPT content + ALL Unsplash calls run in parallel ──
+      const allCats = ['Marketing','AI','Strategy','Growth','Content','Technology','News','Featured'];
+      const unsplashP = Promise.all(allCats.map(cat => fetchUnsplashCategory(cat))).catch(() => {});
+      const heroP = UK ? fetch(
+        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(co + ' business professional')}&orientation=landscape&client_id=${UK}`,
+        { signal: AbortSignal.timeout(3000) }
+      ).then(r => r.ok ? r.json() : null).then(p => p ? (p.urls?.regular || '') + '&w=1600&q=85' : '').catch(() => '')
+      : Promise.resolve('');
 
-      // Race OpenAI against a 7s wall — return fallback content if it loses
-      const deadline = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), 7000));
-      const gptCall = fetch('https://api.openai.com/v1/chat/completions', {
+      const gptP = fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + OK },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          max_tokens: 1200,
+          model: 'gpt-4o-mini', max_tokens: 1200,
           response_format: { type: 'json_object' },
           messages: [
-            { role: 'system', content: 'Return only valid JSON. No markdown. No explanation.' },
-            { role: 'user', content: prompt },
+            { role: 'system', content: 'Return only valid JSON. No markdown.' },
+            { role: 'user', content: `Generate a content hub for "${co}". JSON only:
+{"articles":[{"title":"","summary":"2 sentences","category":"Marketing|AI|Strategy|Growth|Content|Technology","slug":"lowercase-hyphen"}],"news":[{"title":"","summary":"1 sentence","slug":""}],"aboutText":"2 paragraphs"}
+6 articles + 6 news. Authentic to ${co}'s industry.` },
           ],
         }),
-        signal: AbortSignal.timeout(7500),
-      });
-
-      let parsed = { articles: [], news: [], aboutText: '' };
-      try {
-        const gr = await Promise.race([gptCall, deadline]);
-        if (!gr.ok) { const et = await gr.text(); throw new Error('OpenAI ' + gr.status + ': ' + et.slice(0, 120)); }
-        const gd = await gr.json();
-        const raw = gd.choices?.[0]?.message?.content || '{}';
-        try { parsed = JSON.parse(raw); } catch (pe) { log('JSON parse err: ' + pe.message); }
-        log('GPT manual done: ' + (parsed.articles?.length || 0) + ' articles');
-      } catch (timeoutOrErr) {
-        log('GPT timeout/err: ' + timeoutOrErr.message + ' — using placeholder content');
-        // Build lightweight placeholder content so we never hard-fail
+        signal: AbortSignal.timeout(8000),
+      }).then(async r => {
+        if (!r.ok) throw new Error('GPT ' + r.status);
+        const d = await r.json();
+        return JSON.parse(d.choices[0].message.content);
+      }).catch(e => {
+        log('GPT err: ' + e.message + ' — using placeholders');
         const cats = ['Marketing','AI','Strategy','Growth','Content','Technology'];
-        parsed.articles = cats.map((cat, i) => ({
-          title: co + ': ' + cat + ' Insights for ' + new Date().getFullYear(),
-          summary: 'Explore how ' + co + ' approaches ' + cat.toLowerCase() + ' to drive business outcomes.',
-          category: cat, slug: cat.toLowerCase() + '-insights-' + i,
-        }));
-        parsed.news = [
-          { title: co + ' Announces New Product Updates', summary: 'The latest product enhancements now available.', slug: 'product-updates' },
-          { title: co + ' Named a Leader in Industry Report', summary: 'Recognized for innovation and customer success.', slug: 'industry-leader' },
-          { title: co + ' Expands Partnership Ecosystem', summary: 'New integrations to accelerate customer workflows.', slug: 'partnerships' },
-          { title: co + ' Customer Spotlight: Driving ROI', summary: 'How customers achieve measurable results with ' + co + '.', slug: 'customer-spotlight' },
-          { title: co + ' Releases Annual State of Industry Report', summary: 'Key findings from surveying 1,000+ professionals.', slug: 'state-of-industry' },
-          { title: co + ' Hosts Virtual Summit', summary: 'Join industry leaders for a day of learning and networking.', slug: 'virtual-summit' },
-        ];
-        parsed.aboutText = co + ' is dedicated to helping teams create, collaborate, and grow. Our content hub brings together the latest insights, product news, and industry thinking to keep you informed and ahead of the curve.';
-      }
-
-      log('GPT manual done: ' + (parsed.articles?.length || 0) + ' articles');
-
-      const ph = (t, i) => ({
-        title: t === 'news' ? 'Company Update ' + (i + 1) : 'Article ' + (i + 1),
-        summary: 'Latest from ' + co + '.',
-        slug: t + '-' + i,
-        category: t === 'news' ? 'News' : 'Insights',
+        return {
+          articles: cats.map((cat, i) => ({
+            title: co + ': ' + cat + ' Insights', summary: 'How ' + co + ' approaches ' + cat.toLowerCase() + '.',
+            category: cat, slug: cat.toLowerCase() + '-insights-' + i,
+          })),
+          news: ['Product Updates','Industry Leader','New Partnerships','Customer Success','State of Industry','Virtual Summit'].map((t,i) => ({
+            title: co + ' ' + t, summary: 'The latest from ' + co + '.', slug: t.toLowerCase().replace(/\s+/g,'-'),
+          })),
+          aboutText: co + ' helps teams create, collaborate, and grow.',
+        };
       });
-      const arts = (parsed.articles || []);
-      const nws  = (parsed.news || []);
-      while (arts.length < 6) arts.push(ph('article', arts.length));
-      while (nws.length  < 6) nws.push(ph('news', nws.length));
 
-      // Fetch Unsplash image pools for each unique category in the content
-      const uniqueCats = [...new Set([
-        ...(arts.map(a => a.category||'Insights')),
-        ...(nws.map(n => 'News')),
-        'Featured',
-      ])];
-      await Promise.all(uniqueCats.map(cat => fetchUnsplashCategory(cat)));
-      // Also fetch a hero image for this company
-      const heroKw = CAT_KEYWORDS[uniqueCats[0]] || CAT_KEYWORDS.default;
-      let heroImageUrl = '';
-      if (UK) {
-        try {
-          const hr = await fetch(
-            `https://api.unsplash.com/photos/random?query=${encodeURIComponent(co+' '+heroKw)}&orientation=landscape&client_id=${UK}`,
-            { signal: AbortSignal.timeout(4000) }
-          );
-          if (hr.ok) { const hp = await hr.json(); heroImageUrl = (hp.urls?.full || hp.urls?.regular || '') + '&w=1600&q=85'; log('Hero image OK'); }
-        } catch(e) { log('Hero img err: ' + e.message); }
-      }
+      // Wait for ALL in parallel — total ~3-5s
+      const [parsed, _img, heroImageUrl] = await Promise.all([gptP, unsplashP, heroP]);
+      log('GPT+images done: ' + (parsed.articles?.length||0) + ' articles, hero=' + (heroImageUrl?'yes':'no'));
+
+      // Fill gaps
+      const ph = (t, i) => ({ title: t==='news'?'Update '+(i+1):'Article '+(i+1), summary:'From '+co+'.', slug:t+'-'+i, category:t==='news'?'News':'Insights' });
+      const arts = parsed.articles || []; const nws = parsed.news || [];
+      while (arts.length < 6) arts.push(ph('article', arts.length));
+      while (nws.length < 6) nws.push(ph('news', nws.length));
 
       const mkItem = (a, i, t) => ({
-        id: t + '-' + i,
-        title: String(a.title || t + ' ' + (i + 1)),
-        summary: String(a.summary || ''),
+        id: t+'-'+i, title: String(a.title||t+' '+(i+1)), summary: String(a.summary||''),
         imageUrl: getUnsplashImg(a.slug||(a.title||t+'-'+i), a.category||(t==='news'?'News':'Insights'), i),
         imageSource: UK ? 'unsplash' : 'picsum',
-        slug: String(a.slug || (a.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || t + '-' + i),
-        category: String(a.category || (t === 'news' ? 'News' : 'Insights')),
-        readTime: t === 'news' ? '2 min read' : '5 min read',
-        date: new Date(Date.now() - i * 86400000 * 3).toISOString().slice(0, 10),
-        body: '<p>' + (a.summary || 'Coming soon.') + '</p>',
-        source: 'manual', isNew: false, jasperDocId: null, jasperDocUrl: null,
+        slug: String(a.slug||(a.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||t+'-'+i),
+        category: String(a.category||(t==='news'?'News':'Insights')),
+        readTime: t==='news'?'2 min read':'5 min read',
+        date: new Date(Date.now()-i*86400000*3).toISOString().slice(0,10),
+        body: '<p>'+(a.summary||'Coming soon.')+'</p>',
+        source:'manual', isNew:false, jasperDocId:null, jasperDocUrl:null,
       });
 
-      log('DONE manual ' + ((Date.now() - T) / 1000).toFixed(1) + 's');
-      return {
-        statusCode: 200, headers: H,
-        body: JSON.stringify({
-          _debug: L,
-          companyName: co,
-          brandPrimary: '#0f172a', brandAccent: '#6366f1',
-          brandBg: '#f9f7f4', brandText: '#1a1a2e', brandHeaderText: '#ffffff',
-          logoUrl: '', heroHeadline: 'Insights & Resources',
-          heroSubheading: 'Expert thinking to help your team move faster.',
-          heroImageUrl: heroImageUrl,
-          articles: arts.slice(0, 6).map((a, i) => mkItem(a, i, 'article')),
-          news: nws.slice(0, 6).map((a, i) => mkItem(a, i, 'news')),
-          aboutText: String(parsed.aboutText || 'A modern content hub.'),
-          products: [], featuredArticle: null,
-        }),
-      };
+      log('DONE manual '+((Date.now()-T)/1000).toFixed(1)+'s');
+      return { statusCode:200, headers:H, body:JSON.stringify({
+        _debug:L, companyName:co,
+        brandPrimary:'#0f172a', brandAccent:'#6366f1',
+        brandBg:'#f9f7f4', brandText:'#1a1a2e', brandHeaderText:'#ffffff',
+        logoUrl:'', heroHeadline:'Insights & Resources',
+        heroSubheading:'Expert thinking to help your team move faster.',
+        heroImageUrl: heroImageUrl || '',
+        articles: arts.slice(0,6).map((a,i) => mkItem(a,i,'article')),
+        news: nws.slice(0,6).map((a,i) => mkItem(a,i,'news')),
+        aboutText: String(parsed.aboutText||'A modern content hub.'),
+        products:[], featuredArticle:null,
+      })};
     } catch (err) {
       log('MANUAL ERROR: ' + err.message);
-      return { statusCode: 500, headers: H, body: JSON.stringify({ error: String(err.message), _debug: L }) };
+      return { statusCode:500, headers:H, body:JSON.stringify({error:String(err.message), _debug:L}) };
     }
   }
 
