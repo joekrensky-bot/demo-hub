@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   const FK = process.env.FIRECRAWL_API_KEY;
   const JK = process.env.JASPER_API_KEY;
   const UK = process.env.UNSPLASH_ACCESS_KEY;
-  if (!OK) return { statusCode: 500, headers: H, body: JSON.stringify({ error: 'No OPENAI key' }) };
+  // Note: OPENAI key only required for scrape/manual modes, NOT for Jasper/Workato pushes
 
   const T = Date.now(), L = [], log = m => { const e = `[${Date.now()-T}ms] ${m}`; console.log(e); L.push(e); };
 
@@ -192,6 +192,7 @@ exports.handler = async (event) => {
   };
 
   if (manual) {
+    if (!OK) return { statusCode:500, headers:H, body:JSON.stringify({error:'OPENAI_API_KEY required for manual mode'}) };
     log('MANUAL mode for: ' + url);
     try {
       const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
@@ -410,6 +411,7 @@ exports.handler = async (event) => {
     '\n6 articles+6 news. Real titles first. Slugs lowercase-hyphen.';
 
   try {
+    if (!OK) return { statusCode:500, headers:H, body:JSON.stringify({error:'OPENAI_API_KEY required for scrape mode', _debug:L}) };
     log('GPT start ('+prompt.length+' chars)');
     const gr = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
