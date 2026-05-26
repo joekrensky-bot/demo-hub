@@ -131,8 +131,8 @@ exports.handler = async (event) => {
         log('Listing Jasper users (paginated)');
         let allUsers = [];
         let page = 1;
-        const PER_PAGE = 100;
-        const MAX_PAGES = 10; // safety cap = 1000 users max
+        const PER_PAGE = 50;
+        const MAX_PAGES = 20; // safety cap = 1000 users max
         while (page <= MAX_PAGES) {
           const r = await fetch('https://api.jasper.ai/v1/users?limit=' + PER_PAGE + '&page=' + page, {
             method:'GET', headers:jH,
