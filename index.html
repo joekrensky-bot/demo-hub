@@ -1914,10 +1914,10 @@ function DemoHub(){
     return()=>clearInterval(tick);
   },[]);
 
-  // Contentful item takes position 1, dedup rest by slug
+  // Simple rule: Contentful item (if any) takes position 1, replacing proxy articles[0]
   const cfItem=contentfulItems&&contentfulItems[0];
-  const baseArts=(config.articles||[]).filter(function(a){return !cfItem||a.slug!==cfItem.slug;});
-  const merged=cfItem?[cfItem,...baseArts].slice(0,6):baseArts.slice(0,6);
+  const baseArts=config.articles||[];
+  const merged=cfItem?[cfItem,...baseArts.slice(1)].slice(0,6):baseArts.slice(0,6);
   const newsItems=(config.news||[]).slice(0,6);
   const featuredArticle=merged[0];
   const gridArticles=merged.slice(1,7);
@@ -1992,8 +1992,9 @@ function ListingPage({type}){
 
   const baseItems=isArticles?(config.articles||[]):(config.news||[]);
   const cfItem0=isArticles&&contentfulItems&&contentfulItems[0]?{...contentfulItems[0],isNew:true}:null;
-  const dedupBase=baseItems.filter(function(a){return !cfItem0||a.slug!==cfItem0.slug;});
-  const all=cfItem0?[cfItem0,...dedupBase].slice(0,7):dedupBase.slice(0,7);
+  // Simple rule: if Contentful item exists, it replaces position 1 from proxy
+  const remaining=cfItem0?baseItems.slice(1):baseItems;
+  const all=cfItem0?[cfItem0,...remaining].slice(0,7):remaining.slice(0,7);
 
   const cats=['All',...new Set(all.map(a=>a.category).filter(Boolean))];
   const filtered=activeCategory==='All'?all:all.filter(a=>a.category===activeCategory);
