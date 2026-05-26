@@ -13,7 +13,7 @@ exports.handler = async (event) => {
   const FK = process.env.FIRECRAWL_API_KEY;
   const JK = process.env.JASPER_API_KEY;
   const UK = process.env.UNSPLASH_ACCESS_KEY;
-  if (!OK) return { statusCode: 500, headers: H, body: JSON.stringify({ error: 'No OPENAI key' }) };
+  // Note: OPENAI key only required for scrape/manual modes, NOT for Jasper/Workato pushes
 
   const T = Date.now(), L = [], log = m => { const e = `[${Date.now()-T}ms] ${m}`; console.log(e); L.push(e); };
 
@@ -128,17 +128,34 @@ exports.handler = async (event) => {
         return { statusCode:200, headers:H, body:JSON.stringify({ projectId, docId, appUrl, _debug:L }) };
       }
       if (_action === 'listUsers') {
-        log('Listing Jasper users');
-        const r = await fetch('https://api.jasper.ai/v1/users', {
-          method:'GET', headers:jH,
-          signal:AbortSignal.timeout(8000),
-        });
-        const t = await r.text();
-        log('Users response: ' + r.status + ' ' + t.slice(0,120));
-        if (!r.ok) return { statusCode:r.status, headers:H, body:JSON.stringify({error:'Users: '+t.slice(0,200), _debug:L}) };
-        const d = JSON.parse(t);
-        const arr = Array.isArray(d.data) ? d.data : (Array.isArray(d.users) ? d.users : Array.isArray(d) ? d : []);
-        const users = arr.map(u=>({ id:u.id||u.userId||'', email:u.email||'', name:((u.firstName||'')+' '+(u.lastName||'')).trim() }));
+        log('Listing Jasper users (paginated)');
+        let allUsers = [];
+        let page = 1;
+        const PER_PAGE = 100;
+        const MAX_PAGES = 10; // safety cap = 1000 users max
+        while (page <= MAX_PAGES) {
+          const r = await fetch('https://api.jasper.ai/v1/users?limit=' + PER_PAGE + '&page=' + page, {
+            method:'GET', headers:jH,
+            signal:AbortSignal.timeout(6000),
+          });
+          const t = await r.text();
+          log('Users page ' + page + ': ' + r.status + ' (' + t.length + ' chars)');
+          if (!r.ok) {
+            if (page === 1) return { statusCode:r.status, headers:H, body:JSON.stringify({error:'Users: '+t.slice(0,200), _debug:L}) };
+            log('Stopping pagination on page ' + page + ' error');
+            break;
+          }
+          let d; try { d = JSON.parse(t); } catch(e) { log('Parse err page '+page); break; }
+          const arr = Array.isArray(d.data) ? d.data : (Array.isArray(d.users) ? d.users : Array.isArray(d) ? d : []);
+          if (arr.length === 0) { log('Empty page ' + page + ', stopping'); break; }
+          allUsers = allUsers.concat(arr);
+          log('Got ' + arr.length + ' users on page ' + page + ' (total: ' + allUsers.length + ')');
+          if (arr.length < PER_PAGE) { log('Last page reached'); break; }
+          page++;
+        }
+        const users = allUsers.map(u=>({ id:u.id||u.userId||'', email:u.email||'', name:((u.firstName||'')+' '+(u.lastName||'')).trim() }))
+          .sort((a,b) => (a.email||'').localeCompare(b.email||''));
+        log('Total users returned: ' + users.length);
         return { statusCode:200, headers:H, body:JSON.stringify({ users, _debug:L }) };
       }
       return { statusCode:400, headers:H, body:JSON.stringify({error:'unknown action: '+_action, _debug:L}) };
@@ -192,6 +209,7 @@ exports.handler = async (event) => {
   };
 
   if (manual) {
+    if (!OK) return { statusCode:500, headers:H, body:JSON.stringify({error:'OPENAI_API_KEY required for manual mode'}) };
     log('MANUAL mode for: ' + url);
     try {
       const co = url.replace(/https?:\/\//, '').split('/')[0].replace(/\..+/, '');
@@ -410,6 +428,7 @@ exports.handler = async (event) => {
     '\n6 articles+6 news. Real titles first. Slugs lowercase-hyphen.';
 
   try {
+    if (!OK) return { statusCode:500, headers:H, body:JSON.stringify({error:'OPENAI_API_KEY required for scrape mode', _debug:L}) };
     log('GPT start ('+prompt.length+' chars)');
     const gr = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
